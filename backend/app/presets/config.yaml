@@ -1,0 +1,195 @@
+presets:
+  txt2img:
+    realistic:
+      model: realismIllustriousBy_v55FP16
+      steps: 30
+      cfg_scale: 7
+      sampler_name: DPM++ 2M Karras
+      width: 768
+      height: 1024
+      base_positive: "masterpiece, best quality, ultra detailed, photorealistic, 8k, sharp focus"
+      base_negative: "nsfw, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, jpeg artifacts, signature, watermark, blurry, deformed"
+
+    anime:
+      model: anything-v5-PrtRE
+      steps: 28
+      cfg_scale: 7.5
+      sampler_name: Euler a
+      width: 512
+      height: 768
+      base_positive: "masterpiece, best quality, anime style, highly detailed, beautiful lighting, vibrant colors"
+      base_negative: "nsfw, lowres, bad anatomy, bad hands, text, watermark, blurry, realistic, 3d render, ugly, duplicate"
+
+    advertisement:
+      model: juggernautXL_v9Rdphoto2Lightning
+      steps: 35
+      cfg_scale: 6.5
+      sampler_name: DPM++ 2M Karras
+      width: 1024
+      height: 1024
+      base_positive: "commercial photography, product shot, studio lighting, clean background, professional, 4k, crisp detail, advertisement quality"
+      base_negative: "nsfw, amateur, low quality, blurry, noise, distortion, overexposed, underexposed, text, watermark"
+
+    portrait:
+      model: chilloutmix_NiPrunedFp32Fix
+      steps: 30
+      cfg_scale: 7
+      sampler_name: DPM++ 2M Karras
+      width: 512
+      height: 768
+      base_positive: "masterpiece, best quality, portrait, beautiful face, detailed skin, soft lighting, professional photo"
+      base_negative: "nsfw, lowres, bad anatomy, bad hands, text, watermark, blurry, cartoon, anime, painting"
+
+    artistic:
+      model: dreamshaper_8
+      steps: 30
+      cfg_scale: 7.5
+      sampler_name: DPM++ 2M Karras
+      width: 768
+      height: 768
+      base_positive: "masterpiece, best quality, highly detailed, artstation, concept art, smooth, sharp focus, illustration"
+      base_negative: "nsfw, lowres, bad anatomy, bad hands, text, watermark, blurry, ugly, duplicate"
+
+  img2img:
+    realistic:
+      model: realismIllustriousBy_v55FP16
+      denoising_strength: 0.55
+      steps: 30
+      cfg_scale: 7
+      sampler_name: DPM++ 2M Karras
+      base_positive: "masterpiece, best quality, ultra detailed, photorealistic, 8k"
+      base_negative: "nsfw, lowres, bad anatomy, bad hands, text, watermark, blurry, deformed"
+
+    anime:
+      model: anything-v5-PrtRE
+      denoising_strength: 0.6
+      steps: 28
+      cfg_scale: 7.5
+      sampler_name: Euler a
+      base_positive: "masterpiece, best quality, anime style, highly detailed"
+      base_negative: "nsfw, lowres, bad anatomy, bad hands, text, watermark, blurry, realistic"
+
+    advertisement:
+      model: juggernautXL_v9Rdphoto2Lightning
+      denoising_strength: 0.5
+      steps: 35
+      cfg_scale: 6.5
+      sampler_name: DPM++ 2M Karras
+      base_positive: "commercial photography, product shot, studio lighting, professional, 4k"
+      base_negative: "nsfw, low quality, blurry, noise, text, watermark"
+
+    portrait:
+      model: chilloutmix_NiPrunedFp32Fix
+      denoising_strength: 0.5
+      steps: 30
+      cfg_scale: 7
+      sampler_name: DPM++ 2M Karras
+      base_positive: "masterpiece, best quality, portrait, beautiful face, detailed skin"
+      base_negative: "nsfw, lowres, bad anatomy, bad hands, text, watermark, blurry"
+
+    artistic:
+      model: dreamshaper_8
+      denoising_strength: 0.6
+      steps: 30
+      cfg_scale: 7.5
+      sampler_name: DPM++ 2M Karras
+      base_positive: "masterpiece, best quality, highly detailed, artstation, concept art"
+      base_negative: "nsfw, lowres, bad anatomy, text, watermark, blurry"
+
+  upscale:
+    default:
+      upscaler_1: R-ESRGAN 4x+
+      upscaler_2: None
+      upscaling_resize: 4
+      gfpgan_visibility: 0.0
+      codeformer_visibility: 0.0
+    face_restore:
+      upscaler_1: R-ESRGAN 4x+
+      upscaler_2: None
+      upscaling_resize: 4
+      gfpgan_visibility: 0.5
+      codeformer_visibility: 0.0
+    anime:
+      upscaler_1: R-ESRGAN 4x+ Anime6B
+      upscaler_2: None
+      upscaling_resize: 4
+      gfpgan_visibility: 0.0
+      codeformer_visibility: 0.0
+
+  outpaint:
+    realistic:
+      model: realismIllustriousBy_v55FP16
+      denoising_strength: 0.85
+      steps: 35
+      cfg_scale: 7
+      sampler_name: DPM++ 2M Karras
+      expand_pixels: 256
+      base_positive: "masterpiece, best quality, photorealistic, seamless, natural continuation"
+      base_negative: "nsfw, lowres, bad anatomy, text, watermark, blurry, abrupt edge, inconsistent"
+
+    anime:
+      model: anything-v5-PrtRE
+      denoising_strength: 0.85
+      steps: 30
+      cfg_scale: 7.5
+      sampler_name: Euler a
+      expand_pixels: 256
+      base_positive: "masterpiece, best quality, anime style, seamless, natural continuation"
+      base_negative: "nsfw, lowres, bad anatomy, text, watermark, blurry, inconsistent"
+
+    advertisement:
+      model: juggernautXL_v9Rdphoto2Lightning
+      denoising_strength: 0.85
+      steps: 35
+      cfg_scale: 6.5
+      sampler_name: DPM++ 2M Karras
+      expand_pixels: 256
+      base_positive: "commercial photography, studio lighting, seamless, professional, natural continuation"
+      base_negative: "nsfw, low quality, blurry, inconsistent lighting, abrupt edge"
+
+    portrait:
+      model: chilloutmix_NiPrunedFp32Fix
+      denoising_strength: 0.8
+      steps: 30
+      cfg_scale: 7
+      sampler_name: DPM++ 2M Karras
+      expand_pixels: 256
+      base_positive: "masterpiece, best quality, portrait, seamless, natural continuation"
+      base_negative: "nsfw, lowres, bad anatomy, text, watermark, blurry"
+
+    artistic:
+      model: dreamshaper_8
+      denoising_strength: 0.85
+      steps: 30
+      cfg_scale: 7.5
+      sampler_name: DPM++ 2M Karras
+      expand_pixels: 256
+      base_positive: "masterpiece, best quality, concept art, seamless, natural continuation"
+      base_negative: "nsfw, lowres, bad anatomy, text, watermark, blurry"
+
+# Model metadata (sd_version needed to set correct resolution)
+models:
+  realismIllustriousBy_v55FP16:
+    sd_version: "1.5"
+    default_width: 768
+    default_height: 1024
+  v1-5-pruned-emaonly:
+    sd_version: "1.5"
+    default_width: 512
+    default_height: 512
+  anything-v5-PrtRE:
+    sd_version: "1.5"
+    default_width: 512
+    default_height: 768
+  juggernautXL_v9Rdphoto2Lightning:
+    sd_version: "XL"
+    default_width: 1024
+    default_height: 1024
+  chilloutmix_NiPrunedFp32Fix:
+    sd_version: "1.5"
+    default_width: 512
+    default_height: 768
+  dreamshaper_8:
+    sd_version: "1.5"
+    default_width: 768
+    default_height: 768

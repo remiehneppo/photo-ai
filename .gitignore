@@ -1,0 +1,39 @@
+# Environment and secrets
+.env
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Test artifacts
+test-results/
+playwright-report/
+
+# Local generated analysis artifacts
+.understand-anything/
+
+# Runtime image storage
+storage/input/*
+storage/output/*
+!storage/input/.gitkeep
+!storage/output/.gitkeep
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
