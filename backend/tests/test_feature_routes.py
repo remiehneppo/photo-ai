@@ -154,6 +154,30 @@ def test_generate_route_creates_job_and_output_image(monkeypatch):
     assert "cinematic portrait" in fake.payloads[0][1]["prompt"]
 
 
+def test_generate_route_can_enable_adetailer(monkeypatch):
+    factory = session_factory()
+    db = factory()
+    user = seed_user(db)
+    fake = FakeA1111()
+    patch_common(monkeypatch, generate, factory, fake)
+    tasks = CapturedTasks()
+
+    response = asyncio.run(call_and_run_tasks(
+        generate.generate(
+            req=generate.GenerateRequest(prompt="cinematic portrait", style="realistic", fix_face=True, fix_hands=True),
+            background_tasks=tasks,
+            db=db,
+            current_user=user,
+        ),
+        tasks,
+    ))
+
+    assert response.status == "pending"
+    adetailer_args = fake.payloads[0][1]["alwayson_scripts"]["ADetailer"]["args"]
+    assert adetailer_args[2]["ad_model"] == "face_yolov8s.pt"
+    assert adetailer_args[3]["ad_model"] == "hand_yolov8n.pt"
+
+
 def test_edit_route_saves_input_and_output(monkeypatch):
     factory = session_factory()
     db = factory()

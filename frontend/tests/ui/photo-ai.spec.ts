@@ -183,6 +183,7 @@ test("generate tab lets a creator choose style, submit prompt, and see result", 
   await expect(page.getByRole("navigation").getByRole("button", { name: "Generate" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Generate" }).last()).toBeDisabled();
   await page.getByRole("button", { name: "Anime" }).click();
+  await page.getByLabel("Fix face").check();
   await page.getByPlaceholder("Describe the image you want...").fill("cinematic portrait in neon rain");
   await page.getByRole("button", { name: "Generate" }).last().click();
 

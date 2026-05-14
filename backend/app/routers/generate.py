@@ -6,6 +6,7 @@ from app.models.user import User
 from app.models.job import Job
 from app.models.image import Image
 from app.services.auth_service import get_current_user
+from app.services.adetailer_service import build_adetailer_scripts, has_adetailer
 from app.services.preset_service import get_preset, merge_prompt, available_styles
 from app.services.a1111_client import a1111
 from app.services.storage_service import save_output, get_image_url
@@ -20,6 +21,8 @@ VALID_STYLES = ["realistic", "anime", "advertisement", "portrait", "artistic"]
 class GenerateRequest(BaseModel):
     prompt: str
     style: str = "realistic"
+    fix_face: bool = False
+    fix_hands: bool = False
 
 
 class JobResponse(BaseModel):
@@ -36,6 +39,8 @@ async def generate(
 ):
     if req.style not in VALID_STYLES:
         raise HTTPException(status_code=400, detail=f"Invalid style. Choose from: {VALID_STYLES}")
+    if (req.fix_face or req.fix_hands) and not await has_adetailer(a1111):
+        raise HTTPException(status_code=400, detail="ADetailer is not available in A1111")
 
     preset = get_preset("txt2img", req.style)
     job = Job(
@@ -69,6 +74,9 @@ async def generate(
             "width": preset["width"],
             "height": preset["height"],
         }
+        adetailer = build_adetailer_scripts(req.fix_face, req.fix_hands)
+        if adetailer:
+            payload["alwayson_scripts"] = adetailer
         images = await a1111.txt2img(payload)
         img_bytes = a1111.decode_image(images[0])
         file_path, filename = await save_output(img_bytes)

@@ -41,6 +41,8 @@ Lý do làm trước:
 
 ## Phase B - ADetailer Auto Fix
 
+Trạng thái: DONE.
+
 Mục tiêu:
 - Thêm tùy chọn auto fix face/hand cho generate/edit/outpaint.
 
@@ -72,6 +74,13 @@ Tests:
 Rủi ro:
 - ADetailer API arg names phụ thuộc version extension.
 - Cần test trực tiếp với A1111 sau khi extension đã cài.
+
+Đã triển khai:
+- Backend flags `fix_face`, `fix_hands` cho generate/edit/outpaint.
+- Backend tự kiểm tra ADetailer extension khi user bật flag.
+- ADetailer payload theo `alwayson_scripts.ADetailer.args`.
+- FE checkbox `Fix face` / `Fix hands`, tự disable nếu capability báo thiếu ADetailer.
+- Unit/UI tests cho payload và controls.
 
 ## Phase C - ControlNet Reference
 

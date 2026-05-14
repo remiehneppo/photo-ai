@@ -6,6 +6,7 @@ from app.models.user import User
 from app.models.job import Job
 from app.models.image import Image
 from app.services.auth_service import get_current_user
+from app.services.adetailer_service import build_adetailer_scripts, has_adetailer
 from app.services.preset_service import get_preset, merge_prompt
 from app.services.a1111_client import a1111
 from app.services.storage_service import save_upload, save_output
@@ -27,12 +28,16 @@ async def edit_image(
     background_tasks: BackgroundTasks,
     prompt: str = Form(...),
     style: str = Form("realistic"),
+    fix_face: bool = Form(False),
+    fix_hands: bool = Form(False),
     image: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     if style not in VALID_STYLES:
         raise HTTPException(status_code=400, detail=f"Invalid style. Choose from: {VALID_STYLES}")
+    if (fix_face or fix_hands) and not await has_adetailer(a1111):
+        raise HTTPException(status_code=400, detail="ADetailer is not available in A1111")
 
     image_bytes = await image.read()
     file_path, filename = await save_upload(image_bytes)
@@ -68,6 +73,9 @@ async def edit_image(
             "cfg_scale": preset["cfg_scale"],
             "sampler_name": preset["sampler_name"],
         }
+        adetailer = build_adetailer_scripts(fix_face, fix_hands)
+        if adetailer:
+            payload["alwayson_scripts"] = adetailer
         images = await a1111.img2img(payload)
         img_bytes = a1111.decode_image(images[0])
         out_path, out_filename = await save_output(img_bytes)

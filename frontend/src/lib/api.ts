@@ -67,18 +67,20 @@ export function getCapabilities() {
   return request<Capabilities>("/api/capabilities");
 }
 
-export function generateImage(payload: { prompt: string; style: Style }) {
+export function generateImage(payload: { prompt: string; style: Style; fix_face?: boolean; fix_hands?: boolean }) {
   return request<JobResponse>("/api/generate", {
     method: "POST",
     body: JSON.stringify(payload)
   });
 }
 
-export function editImage(payload: { prompt: string; style: Style; image: File }) {
+export function editImage(payload: { prompt: string; style: Style; image: File; fix_face?: boolean; fix_hands?: boolean }) {
   const form = new FormData();
   form.set("prompt", payload.prompt);
   form.set("style", payload.style);
   form.set("image", payload.image);
+  form.set("fix_face", String(Boolean(payload.fix_face)));
+  form.set("fix_hands", String(Boolean(payload.fix_hands)));
   return request<JobResponse>("/api/edit", { method: "POST", body: form });
 }
 
@@ -96,12 +98,14 @@ export function sharpenImage(payload: { mode: string; image: File }) {
   return request<JobResponse>("/api/sharpen", { method: "POST", body: form });
 }
 
-export function outpaintImage(payload: { prompt: string; style: Style; direction: Direction; image: File }) {
+export function outpaintImage(payload: { prompt: string; style: Style; direction: Direction; image: File; fix_face?: boolean; fix_hands?: boolean }) {
   const form = new FormData();
   form.set("prompt", payload.prompt);
   form.set("style", payload.style);
   form.set("direction", payload.direction);
   form.set("image", payload.image);
+  form.set("fix_face", String(Boolean(payload.fix_face)));
+  form.set("fix_hands", String(Boolean(payload.fix_hands)));
   return request<JobResponse>("/api/outpaint", { method: "POST", body: form });
 }
 

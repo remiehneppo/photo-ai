@@ -53,6 +53,7 @@
 - [ ] Review model download checklist: `.plan/MODEL_DOWNLOAD_CHECKLIST.md`
 - [ ] Review next A1111 integration plan: `.plan/NEXT_FEATURE_PLAN.md`
 - [x] Phase A capability detection (`GET /api/capabilities` + dashboard status)
+- [x] Phase B ADetailer auto fix controls/payload
 - [ ] Replace raw `<img>` tags with `next/image` or intentionally disable the warning
 - [ ] Resolve remaining npm audit moderate warnings if a patched Next release becomes available
 - [ ] `docker-compose.yml` (backend + frontend + postgres)

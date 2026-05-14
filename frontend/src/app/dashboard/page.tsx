@@ -79,11 +79,11 @@ export default function DashboardPage() {
         </nav>
 
         <section className="min-w-0">
-          {tab === "generate" && <GenerateTab />}
-          {tab === "edit" && <EditTab />}
+          {tab === "generate" && <GenerateTab capabilities={capabilities} />}
+          {tab === "edit" && <EditTab capabilities={capabilities} />}
           {tab === "upscale" && <UpscaleTab />}
           {tab === "sharpen" && <SharpenTab />}
-          {tab === "outpaint" && <OutpaintTab />}
+          {tab === "outpaint" && <OutpaintTab capabilities={capabilities} />}
           {tab === "history" && <HistoryTab />}
         </section>
       </div>
@@ -117,9 +117,11 @@ function Panel({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function GenerateTab() {
+function GenerateTab({ capabilities }: { capabilities: Capabilities | null }) {
   const [prompt, setPrompt] = useState("");
   const [style, setStyle] = useState<Style>("realistic");
+  const [fixFace, setFixFace] = useState(false);
+  const [fixHands, setFixHands] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
   const [result, setResult] = useState<JobDetail | null>(null);
   const [error, setError] = useState("");
@@ -131,7 +133,7 @@ function GenerateTab() {
     setLoading(true);
     setResult(null);
     try {
-      const job = await generateImage({ prompt, style });
+      const job = await generateImage({ prompt, style, fix_face: fixFace, fix_hands: fixHands });
       setJobId(job.job_id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start generation");
@@ -145,6 +147,7 @@ function GenerateTab() {
       <form onSubmit={submit} className="grid gap-4">
         <StyleSelector value={style} onChange={setStyle} />
         <PromptInput value={prompt} onChange={setPrompt} />
+        <FixOptions capabilities={capabilities} fixFace={fixFace} fixHands={fixHands} onFixFace={setFixFace} onFixHands={setFixHands} />
         {error && <p className="text-sm text-danger">{error}</p>}
         <ActionButton disabled={loading || !prompt.trim()} icon={<Wand2 className="h-4 w-4" />}>
           {loading ? "Starting..." : "Generate"}
@@ -158,9 +161,11 @@ function GenerateTab() {
   );
 }
 
-function EditTab() {
+function EditTab({ capabilities }: { capabilities: Capabilities | null }) {
   const [prompt, setPrompt] = useState("");
   const [style, setStyle] = useState<Style>("realistic");
+  const [fixFace, setFixFace] = useState(false);
+  const [fixHands, setFixHands] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [result, setResult] = useState<JobDetail | null>(null);
@@ -174,7 +179,7 @@ function EditTab() {
     setLoading(true);
     setResult(null);
     try {
-      const job = await editImage({ prompt, style, image: file });
+      const job = await editImage({ prompt, style, image: file, fix_face: fixFace, fix_hands: fixHands });
       setJobId(job.job_id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start edit");
@@ -189,6 +194,7 @@ function EditTab() {
         <ImageUpload file={file} onChange={setFile} />
         <StyleSelector value={style} onChange={setStyle} />
         <PromptInput value={prompt} onChange={setPrompt} placeholder="Describe the change..." />
+        <FixOptions capabilities={capabilities} fixFace={fixFace} fixHands={fixHands} onFixFace={setFixFace} onFixHands={setFixHands} />
         {error && <p className="text-sm text-danger">{error}</p>}
         <ActionButton disabled={loading || !file || !prompt.trim()} icon={<Brush className="h-4 w-4" />}>
           {loading ? "Starting..." : "Edit image"}
@@ -294,9 +300,11 @@ function SharpenTab() {
   );
 }
 
-function OutpaintTab() {
+function OutpaintTab({ capabilities }: { capabilities: Capabilities | null }) {
   const [prompt, setPrompt] = useState("");
   const [style, setStyle] = useState<Style>("realistic");
+  const [fixFace, setFixFace] = useState(false);
+  const [fixHands, setFixHands] = useState(false);
   const [direction, setDirection] = useState<Direction>("all");
   const [file, setFile] = useState<File | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
@@ -311,7 +319,7 @@ function OutpaintTab() {
     setLoading(true);
     setResult(null);
     try {
-      const job = await outpaintImage({ prompt, style, direction, image: file });
+      const job = await outpaintImage({ prompt, style, direction, image: file, fix_face: fixFace, fix_hands: fixHands });
       setJobId(job.job_id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start expand");
@@ -327,6 +335,7 @@ function OutpaintTab() {
         <DirectionSelector value={direction} onChange={setDirection} />
         <StyleSelector value={style} onChange={setStyle} />
         <PromptInput value={prompt} onChange={setPrompt} placeholder="Optional context for the new area..." />
+        <FixOptions capabilities={capabilities} fixFace={fixFace} fixHands={fixHands} onFixFace={setFixFace} onFixHands={setFixHands} />
         {error && <p className="text-sm text-danger">{error}</p>}
         <ActionButton disabled={loading || !file} icon={<Expand className="h-4 w-4" />}>
           {loading ? "Starting..." : "Expand image"}
@@ -337,6 +346,36 @@ function OutpaintTab() {
         <ImageResult job={result} />
       </div>
     </Panel>
+  );
+}
+
+function FixOptions({
+  capabilities,
+  fixFace,
+  fixHands,
+  onFixFace,
+  onFixHands
+}: {
+  capabilities: Capabilities | null;
+  fixFace: boolean;
+  fixHands: boolean;
+  onFixFace: (value: boolean) => void;
+  onFixHands: (value: boolean) => void;
+}) {
+  const available = capabilities?.adetailer_available ?? false;
+
+  return (
+    <div className="grid gap-2 rounded-md border border-line bg-white p-3 sm:grid-cols-2">
+      <label className="flex items-center gap-2 text-sm font-semibold text-ink">
+        <input className="h-4 w-4 accent-accent" type="checkbox" disabled={!available} checked={available && fixFace} onChange={(event) => onFixFace(event.target.checked)} />
+        Fix face
+      </label>
+      <label className="flex items-center gap-2 text-sm font-semibold text-ink">
+        <input className="h-4 w-4 accent-accent" type="checkbox" disabled={!available} checked={available && fixHands} onChange={(event) => onFixHands(event.target.checked)} />
+        Fix hands
+      </label>
+      {!available && <p className="text-xs text-muted sm:col-span-2">ADetailer is not available in A1111.</p>}
+    </div>
   );
 }
 
