@@ -12,6 +12,8 @@
 
 ## Phase A - Capability Detection
 
+Trạng thái: DONE.
+
 Mục tiêu:
 - Backend đọc trạng thái A1111 và extensions/models đã cài.
 - FE có thể disable feature nếu thiếu extension/model.
@@ -30,6 +32,12 @@ Backend đề xuất:
 Lý do làm trước:
 - Tránh user bấm feature rồi mới lỗi do thiếu model.
 - Hữu ích cho setup/debug.
+
+Đã triển khai:
+- Backend route `GET /api/capabilities`.
+- A1111 client methods: models, upscalers, extensions, ControlNet models, SAM heartbeat.
+- FE dashboard header hiển thị A1111/checkpoint/upscaler/extension summary.
+- Backend + frontend mocked UI tests.
 
 ## Phase B - ADetailer Auto Fix
 

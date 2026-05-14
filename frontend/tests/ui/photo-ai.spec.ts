@@ -54,6 +54,20 @@ async function mockApi(page: Page) {
       return;
     }
 
+    if (url.pathname === "/api/capabilities") {
+      await fulfillJson(route, {
+        a1111_connected: true,
+        checkpoints: ["realismIllustriousBy_v55FP16", "anything-v5"],
+        upscalers: ["R-ESRGAN 4x+"],
+        extensions: ["sd-webui-controlnet", "adetailer"],
+        controlnet_available: true,
+        controlnet_models: ["control_v11p_sd15_canny"],
+        adetailer_available: true,
+        sam_available: false
+      });
+      return;
+    }
+
     const jobStarts: Record<string, string> = {
       "/api/generate": "txt2img",
       "/api/edit": "img2img",
@@ -133,6 +147,7 @@ async function signIn(page: Page) {
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.getByRole("heading", { name: "Photo AI" })).toBeVisible();
   await expect(page.getByText("creator@example.com")).toBeVisible();
+  await expect(page.getByText(/A1111 connected/)).toBeVisible();
 }
 
 async function uploadImage(page: Page) {

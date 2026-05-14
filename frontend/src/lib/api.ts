@@ -1,7 +1,7 @@
 "use client";
 
 import { clearToken, getToken, setToken } from "@/lib/auth";
-import type { Direction, JobDetail, JobResponse, Style, TokenResponse, User } from "@/types";
+import type { Capabilities, Direction, JobDetail, JobResponse, Style, TokenResponse, User } from "@/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
@@ -61,6 +61,10 @@ export async function login(email: string, password: string) {
 
 export function me() {
   return request<User>("/auth/me");
+}
+
+export function getCapabilities() {
+  return request<Capabilities>("/api/capabilities");
 }
 
 export function generateImage(payload: { prompt: string; style: Style }) {

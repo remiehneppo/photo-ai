@@ -10,7 +10,7 @@ from app.database import Base
 from app.models.image import Image
 from app.models.job import Job
 from app.models.user import User
-from app.routers import edit, generate, jobs, outpaint, sharpen, upscale
+from app.routers import capabilities, edit, generate, jobs, outpaint, sharpen, upscale
 
 
 class FakeA1111:
@@ -31,6 +31,28 @@ class FakeA1111:
 
     async def get_progress(self):
         return {"progress": 0.5, "eta_relative": 10, "state": {"sampling_step": 5, "sampling_steps": 10}}
+
+    async def get_models(self):
+        return [
+            {"model_name": "realismIllustriousBy_v55FP16"},
+            {"model_name": "anything-v5"},
+        ]
+
+    async def get_upscalers(self):
+        return [{"name": "R-ESRGAN 4x+"}, {"name": "4x-UltraSharp"}]
+
+    async def get_extensions(self):
+        return [
+            {"name": "sd-webui-controlnet"},
+            {"name": "adetailer"},
+            {"name": "sd-webui-segment-anything"},
+        ]
+
+    async def get_controlnet_models(self):
+        return ["control_v11p_sd15_canny"]
+
+    async def sam_heartbeat(self):
+        return True
 
     @staticmethod
     def decode_image(_value):
@@ -253,3 +275,18 @@ def test_jobs_route_returns_current_user_history():
     assert detail.images[0].url == "/api/images/output/output.png"
     assert detail.progress_percent == 100
     assert detail.progress_label == "Complete"
+
+
+def test_capabilities_route_reports_a1111_features(monkeypatch):
+    fake = FakeA1111()
+    monkeypatch.setattr(capabilities, "a1111", fake)
+
+    result = asyncio.run(capabilities.get_capabilities())
+
+    assert result.a1111_connected is True
+    assert result.checkpoints == ["realismIllustriousBy_v55FP16", "anything-v5"]
+    assert result.upscalers == ["R-ESRGAN 4x+", "4x-UltraSharp"]
+    assert result.controlnet_available is True
+    assert result.controlnet_models == ["control_v11p_sd15_canny"]
+    assert result.adetailer_available is True
+    assert result.sam_available is True

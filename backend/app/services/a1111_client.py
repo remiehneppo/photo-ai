@@ -57,6 +57,27 @@ class A1111Client:
             r.raise_for_status()
             return r.json()
 
+    async def get_extensions(self) -> list[dict]:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(f"{self.base_url}/sdapi/v1/extensions")
+            r.raise_for_status()
+            return r.json()
+
+    async def get_controlnet_models(self) -> list[str]:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(f"{self.base_url}/controlnet/model_list")
+            r.raise_for_status()
+            data = r.json()
+            return data.get("model_list", []) if isinstance(data, dict) else []
+
+    async def sam_heartbeat(self) -> bool:
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                r = await client.get(f"{self.base_url}/sam/heartbeat")
+                return r.status_code == 200
+        except Exception:
+            return False
+
     async def get_progress(self) -> dict[str, Any]:
         async with httpx.AsyncClient(timeout=10) as client:
             r = await client.get(f"{self.base_url}/sdapi/v1/progress?skip_current_image=true")

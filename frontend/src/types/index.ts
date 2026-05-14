@@ -8,6 +8,17 @@ export type User = {
   username: string;
 };
 
+export type Capabilities = {
+  a1111_connected: boolean;
+  checkpoints: string[];
+  upscalers: string[];
+  extensions: string[];
+  controlnet_available: boolean;
+  controlnet_models: string[];
+  adetailer_available: boolean;
+  sam_available: boolean;
+};
+
 export type TokenResponse = {
   access_token: string;
   token_type: string;

@@ -8,8 +8,8 @@ import { JobStatus } from "@/components/JobStatus";
 import { PromptInput } from "@/components/PromptInput";
 import { StyleSelector } from "@/components/StyleSelector";
 import { clearToken, getToken } from "@/lib/auth";
-import { editImage, generateImage, listJobs, me, outpaintImage, sharpenImage, upscaleImage } from "@/lib/api";
-import type { Direction, JobDetail, Style, User } from "@/types";
+import { editImage, generateImage, getCapabilities, listJobs, me, outpaintImage, sharpenImage, upscaleImage } from "@/lib/api";
+import type { Capabilities, Direction, JobDetail, Style, User } from "@/types";
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Brush, Clock3, Expand, ImageUp, LogOut, SlidersHorizontal, Sparkles, Wand2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
@@ -29,6 +29,7 @@ const tabs: Array<{ id: Tab; label: string; icon: ReactNode }> = [
 export default function DashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
+  const [capabilities, setCapabilities] = useState<Capabilities | null>(null);
   const [tab, setTab] = useState<Tab>("generate");
 
   useEffect(() => {
@@ -37,6 +38,7 @@ export default function DashboardPage() {
       return;
     }
     me().then(setUser).catch(() => router.replace("/login"));
+    getCapabilities().then(setCapabilities).catch(() => setCapabilities(null));
   }, [router]);
 
   function logout() {
@@ -51,6 +53,7 @@ export default function DashboardPage() {
           <div>
             <h1 className="text-2xl font-bold">Photo AI</h1>
             <p className="text-sm text-muted">{user ? user.email : "Loading account..."}</p>
+            <CapabilitySummary capabilities={capabilities} />
           </div>
           <ActionButton variant="secondary" onClick={logout} icon={<LogOut className="h-4 w-4" />}>
             Sign out
@@ -85,6 +88,23 @@ export default function DashboardPage() {
         </section>
       </div>
     </main>
+  );
+}
+
+function CapabilitySummary({ capabilities }: { capabilities: Capabilities | null }) {
+  if (!capabilities) return <p className="mt-1 text-xs text-muted">Checking AI engine...</p>;
+
+  const enabled = [
+    capabilities.controlnet_available ? "ControlNet" : null,
+    capabilities.adetailer_available ? "ADetailer" : null,
+    capabilities.sam_available ? "SAM" : null
+  ].filter(Boolean);
+
+  return (
+    <p className="mt-1 text-xs text-muted">
+      {capabilities.a1111_connected ? "A1111 connected" : "A1111 offline"} · {capabilities.checkpoints.length} checkpoints · {capabilities.upscalers.length} upscalers
+      {enabled.length > 0 ? ` · ${enabled.join(", ")}` : ""}
+    </p>
   );
 }
 
