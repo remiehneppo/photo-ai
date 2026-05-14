@@ -48,6 +48,8 @@ def test_run_job_marks_success(monkeypatch):
 
     job = get_job(session_factory)
     assert job.status == "done"
+    assert job.progress_percent == 100
+    assert job.progress_label == "Complete"
     assert job.completed_at is not None
     assert job.error_message is None
 
@@ -65,4 +67,29 @@ def test_run_job_marks_failure(monkeypatch):
     job = get_job(session_factory)
     assert job.status == "failed"
     assert job.error_message == "A1111 offline"
+    assert job.progress_label == "Failed"
     assert job.completed_at is not None
+
+
+def test_update_job_progress_sets_user_visible_fields(monkeypatch):
+    session_factory = make_session_factory()
+    seed_job(session_factory)
+    monkeypatch.setattr(job_service, "SessionLocal", session_factory)
+
+    job_service.update_job_progress(
+        "job-1",
+        progress_percent=42,
+        current_step=4,
+        total_steps=10,
+        eta_seconds=12,
+        estimated_seconds=30,
+        progress_label="Step 4 of 10",
+    )
+
+    job = get_job(session_factory)
+    assert job.progress_percent == 42
+    assert job.current_step == 4
+    assert job.total_steps == 10
+    assert job.eta_seconds == 12
+    assert job.estimated_seconds == 30
+    assert job.progress_label == "Step 4 of 10"

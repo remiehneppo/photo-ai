@@ -8,19 +8,20 @@ import { JobStatus } from "@/components/JobStatus";
 import { PromptInput } from "@/components/PromptInput";
 import { StyleSelector } from "@/components/StyleSelector";
 import { clearToken, getToken } from "@/lib/auth";
-import { editImage, generateImage, listJobs, me, outpaintImage, upscaleImage } from "@/lib/api";
+import { editImage, generateImage, listJobs, me, outpaintImage, sharpenImage, upscaleImage } from "@/lib/api";
 import type { Direction, JobDetail, Style, User } from "@/types";
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Brush, Clock3, Expand, ImageUp, LogOut, Sparkles, Wand2 } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Brush, Clock3, Expand, ImageUp, LogOut, SlidersHorizontal, Sparkles, Wand2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
-type Tab = "generate" | "edit" | "upscale" | "outpaint" | "history";
+type Tab = "generate" | "edit" | "upscale" | "sharpen" | "outpaint" | "history";
 
 const tabs: Array<{ id: Tab; label: string; icon: ReactNode }> = [
   { id: "generate", label: "Generate", icon: <Sparkles className="h-4 w-4" /> },
   { id: "edit", label: "Edit", icon: <Brush className="h-4 w-4" /> },
   { id: "upscale", label: "Upscale", icon: <ImageUp className="h-4 w-4" /> },
+  { id: "sharpen", label: "Sharpen", icon: <SlidersHorizontal className="h-4 w-4" /> },
   { id: "outpaint", label: "Expand", icon: <Expand className="h-4 w-4" /> },
   { id: "history", label: "History", icon: <Clock3 className="h-4 w-4" /> }
 ];
@@ -58,7 +59,7 @@ export default function DashboardPage() {
       </header>
 
       <div className="mx-auto grid max-w-7xl gap-6 px-4 py-6 lg:grid-cols-[220px_1fr]">
-        <nav className="grid h-fit grid-cols-2 gap-2 rounded-md border border-line bg-white p-2 sm:grid-cols-5 lg:grid-cols-1">
+        <nav className="grid h-fit grid-cols-2 gap-2 rounded-md border border-line bg-white p-2 sm:grid-cols-3 lg:grid-cols-1">
           {tabs.map((item) => (
             <button
               key={item.id}
@@ -78,6 +79,7 @@ export default function DashboardPage() {
           {tab === "generate" && <GenerateTab />}
           {tab === "edit" && <EditTab />}
           {tab === "upscale" && <UpscaleTab />}
+          {tab === "sharpen" && <SharpenTab />}
           {tab === "outpaint" && <OutpaintTab />}
           {tab === "history" && <HistoryTab />}
         </section>
@@ -216,6 +218,52 @@ function UpscaleTab() {
         {error && <p className="text-sm text-danger">{error}</p>}
         <ActionButton disabled={loading || !file} icon={<ImageUp className="h-4 w-4" />}>
           {loading ? "Starting..." : "Upscale"}
+        </ActionButton>
+      </form>
+      <div className="mt-5 grid gap-4">
+        <JobStatus jobId={jobId} onDone={setResult} />
+        <ImageResult job={result} />
+      </div>
+    </Panel>
+  );
+}
+
+function SharpenTab() {
+  const [mode, setMode] = useState("default");
+  const [file, setFile] = useState<File | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [result, setResult] = useState<JobDetail | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!file) return;
+    setError("");
+    setLoading(true);
+    setResult(null);
+    try {
+      const job = await sharpenImage({ mode, image: file });
+      setJobId(job.job_id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not start sharpen");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Panel title="Sharpen">
+      <form onSubmit={submit} className="grid gap-4">
+        <ImageUpload file={file} onChange={setFile} />
+        <select className="focus-ring h-11 rounded-md border border-line bg-white px-3" value={mode} onChange={(event) => setMode(event.target.value)}>
+          <option value="soft">Soft</option>
+          <option value="default">Default</option>
+          <option value="strong">Strong</option>
+        </select>
+        {error && <p className="text-sm text-danger">{error}</p>}
+        <ActionButton disabled={loading || !file} icon={<SlidersHorizontal className="h-4 w-4" />}>
+          {loading ? "Starting..." : "Sharpen"}
         </ActionButton>
       </form>
       <div className="mt-5 grid gap-4">

@@ -27,6 +27,12 @@ class JobDetail(BaseModel):
     style: Optional[str]
     user_prompt: Optional[str]
     status: str
+    progress_percent: int
+    current_step: Optional[int]
+    total_steps: Optional[int]
+    eta_seconds: Optional[int]
+    estimated_seconds: Optional[int]
+    progress_label: Optional[str]
     error_message: Optional[str]
     created_at: datetime
     completed_at: Optional[datetime]
@@ -80,6 +86,12 @@ def _build_job_detail(job: Job, db: Session) -> JobDetail:
         style=job.style,
         user_prompt=job.user_prompt,
         status=job.status,
+        progress_percent=job.progress_percent,
+        current_step=job.current_step,
+        total_steps=job.total_steps,
+        eta_seconds=job.eta_seconds,
+        estimated_seconds=job.estimated_seconds,
+        progress_label=job.progress_label,
         error_message=job.error_message,
         created_at=job.created_at,
         completed_at=job.completed_at,

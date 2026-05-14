@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from app.database import engine
 from app.models import User, Job, Image
 from app.database import Base
-from app.routers import auth, generate, edit, upscale, outpaint, jobs
+from app.routers import auth, generate, edit, upscale, sharpen, outpaint, jobs
 from app.config import STORAGE_PATH
 
 Base.metadata.create_all(bind=engine)
@@ -29,6 +29,7 @@ app.include_router(auth.router)
 app.include_router(generate.router)
 app.include_router(edit.router)
 app.include_router(upscale.router)
+app.include_router(sharpen.router)
 app.include_router(outpaint.router)
 app.include_router(jobs.router)
 

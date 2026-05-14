@@ -94,6 +94,11 @@ async def outpaint_image(
         style=style,
         user_prompt=prompt,
         status="pending",
+        progress_percent=0,
+        current_step=0,
+        total_steps=preset["steps"],
+        estimated_seconds=90 if style == "advertisement" else 50,
+        progress_label="Queued",
     )
     db.add(job)
     db.commit()
@@ -130,5 +135,5 @@ async def outpaint_image(
         finally:
             db2.close()
 
-    background_tasks.add_task(run_job, job_id, task)
+    background_tasks.add_task(run_job, job_id, task, a1111.get_progress)
     return JobResponse(job_id=job_id, status="pending")

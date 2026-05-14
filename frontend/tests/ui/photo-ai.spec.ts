@@ -58,6 +58,7 @@ async function mockApi(page: Page) {
       "/api/generate": "txt2img",
       "/api/edit": "img2img",
       "/api/upscale": "upscale",
+      "/api/sharpen": "sharpen",
       "/api/outpaint": "outpaint"
     };
 
@@ -69,6 +70,12 @@ async function mockApi(page: Page) {
         style: "realistic",
         user_prompt: "mock prompt",
         status: "done",
+        progress_percent: 100,
+        current_step: 10,
+        total_steps: 10,
+        eta_seconds: 0,
+        estimated_seconds: 30,
+        progress_label: "Complete",
         error_message: null,
         created_at: new Date("2026-05-13T12:00:00Z").toISOString(),
         completed_at: new Date("2026-05-13T12:01:00Z").toISOString(),
@@ -97,6 +104,12 @@ async function mockApi(page: Page) {
           style: "realistic",
           user_prompt: "mock prompt",
           status: "done",
+          progress_percent: 100,
+          current_step: 10,
+          total_steps: 10,
+          eta_seconds: 0,
+          estimated_seconds: 30,
+          progress_label: "Complete",
           error_message: null,
           created_at: new Date("2026-05-13T12:00:00Z").toISOString(),
           completed_at: new Date("2026-05-13T12:01:00Z").toISOString(),
@@ -163,7 +176,7 @@ test("generate tab lets a creator choose style, submit prompt, and see result", 
   await expect(page.getByText("Output")).toBeVisible();
 });
 
-test("upload workflows expose edit, upscale, and expand controls without A1111", async ({ page }) => {
+test("upload workflows expose edit, upscale, sharpen, and expand controls without A1111", async ({ page }) => {
   await signIn(page);
 
   await page.getByRole("button", { name: "Edit" }).click();
@@ -177,6 +190,12 @@ test("upload workflows expose edit, upscale, and expand controls without A1111",
   await page.getByRole("combobox").selectOption("face_restore");
   await page.getByRole("button", { name: "Upscale" }).last().click();
   await expect(page.getByText("job-upscale")).toBeVisible();
+
+  await page.getByRole("button", { name: "Sharpen" }).click();
+  await uploadImage(page);
+  await page.getByRole("combobox").selectOption("strong");
+  await page.getByRole("button", { name: "Sharpen" }).last().click();
+  await expect(page.getByText("job-sharpen")).toBeVisible();
 
   await page.getByRole("button", { name: "Expand" }).click();
   await uploadImage(page);

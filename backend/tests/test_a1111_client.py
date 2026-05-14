@@ -30,6 +30,8 @@ class FakeAsyncClient:
 
     async def get(self, url):
         self.calls.append(("GET", url, None))
+        if url.endswith("/progress?skip_current_image=true"):
+            return Response(data={"progress": 0.5, "eta_relative": 8, "state": {"sampling_step": 5, "sampling_steps": 10}})
         return Response(data=[{"title": "model"}])
 
     async def post(self, url, json):
@@ -56,9 +58,11 @@ def test_a1111_client_calls_expected_endpoints(monkeypatch):
     assert asyncio.run(client.txt2img({"prompt": "x"})) == ["txt"]
     assert asyncio.run(client.img2img({"prompt": "x"})) == ["img"]
     assert asyncio.run(client.upscale({"image": "x"})) == "upscaled"
+    assert asyncio.run(client.get_progress())["progress"] == 0.5
 
     assert ("POST", "http://a1111.local/sdapi/v1/options", {"sd_model_checkpoint": "model-a"}) in FakeAsyncClient.calls
     assert ("POST", "http://a1111.local/sdapi/v1/txt2img", {"prompt": "x"}) in FakeAsyncClient.calls
+    assert ("GET", "http://a1111.local/sdapi/v1/progress?skip_current_image=true", None) in FakeAsyncClient.calls
 
 
 def test_image_encoding_round_trip():

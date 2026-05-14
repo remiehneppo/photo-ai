@@ -57,6 +57,12 @@ class A1111Client:
             r.raise_for_status()
             return r.json()
 
+    async def get_progress(self) -> dict[str, Any]:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(f"{self.base_url}/sdapi/v1/progress?skip_current_image=true")
+            r.raise_for_status()
+            return r.json()
+
     @staticmethod
     def encode_image(image_bytes: bytes) -> str:
         return base64.b64encode(image_bytes).decode("utf-8")

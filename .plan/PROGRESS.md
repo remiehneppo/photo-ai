@@ -1,6 +1,6 @@
 # Progress Tracker
 
-> Cập nhật lần cuối: 2026-05-13
+> Cập nhật lần cuối: 2026-05-14
 
 ## Status
 
@@ -24,8 +24,10 @@
 - [x] Router: `POST /api/generate` (txt2img)
 - [x] Router: `POST /api/edit` (img2img)
 - [x] Router: `POST /api/upscale`
+- [x] Router: `POST /api/sharpen` (PIL UnsharpMask)
 - [x] Router: `POST /api/outpaint` (PIL mask expand)
 - [x] Router: `GET /api/jobs`, `GET /api/jobs/{id}`
+- [x] Job progress fields + A1111 `/sdapi/v1/progress` polling (`progress_percent`, step, ETA, estimate)
 - [x] Storage service + Job service
 - [x] `backend/Dockerfile`
 - [x] Backend unit tests for auth, presets, storage, A1111 client, job runner, outpaint canvas, feature routers, and job history
@@ -37,14 +39,19 @@
 - [x] Generate tab UI
 - [x] Edit tab UI (image upload)
 - [x] Upscale tab UI
+- [x] Sharpen tab UI
 - [x] Expand/Outpaint tab UI
 - [x] History tab (grid + download)
+- [x] Job status progress bar with step/ETA/estimated wait
 - [x] Frontend API client for backend endpoints
 - [x] Build/typecheck pass
 - [x] Playwright UI smoke tests with mocked backend API (desktop + mobile)
 
 ### ⏳ Next up
 - [ ] Test frontend E2E with backend + PostgreSQL + A1111 running
+- [ ] Validate A1111 progress accuracy during real txt2img/img2img/outpaint jobs
+- [ ] Review model download checklist: `.plan/MODEL_DOWNLOAD_CHECKLIST.md`
+- [ ] Review next A1111 integration plan: `.plan/NEXT_FEATURE_PLAN.md`
 - [ ] Replace raw `<img>` tags with `next/image` or intentionally disable the warning
 - [ ] Resolve remaining npm audit moderate warnings if a patched Next release becomes available
 - [ ] `docker-compose.yml` (backend + frontend + postgres)

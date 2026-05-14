@@ -38,6 +38,9 @@ async def upscale_image(
         feature="upscale",
         style=mode,
         status="pending",
+        progress_percent=0,
+        estimated_seconds=30,
+        progress_label="Queued",
     )
     db.add(job)
     db.commit()
@@ -64,5 +67,5 @@ async def upscale_image(
         finally:
             db2.close()
 
-    background_tasks.add_task(run_job, job_id, task)
+    background_tasks.add_task(run_job, job_id, task, a1111.get_progress)
     return JobResponse(job_id=job_id, status="pending")

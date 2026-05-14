@@ -45,6 +45,11 @@ async def edit_image(
         style=style,
         user_prompt=prompt,
         status="pending",
+        progress_percent=0,
+        current_step=0,
+        total_steps=preset["steps"],
+        estimated_seconds=75 if style == "advertisement" else 40,
+        progress_label="Queued",
     )
     db.add(job)
     db.commit()
@@ -74,5 +79,5 @@ async def edit_image(
         finally:
             db2.close()
 
-    background_tasks.add_task(run_job, job_id, task)
+    background_tasks.add_task(run_job, job_id, task, a1111.get_progress)
     return JobResponse(job_id=job_id, status="pending")

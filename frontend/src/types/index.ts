@@ -31,6 +31,12 @@ export type JobDetail = {
   style?: string | null;
   user_prompt?: string | null;
   status: JobStatus;
+  progress_percent: number;
+  current_step?: number | null;
+  total_steps?: number | null;
+  eta_seconds?: number | null;
+  estimated_seconds?: number | null;
+  progress_label?: string | null;
   error_message?: string | null;
   created_at: string;
   completed_at?: string | null;

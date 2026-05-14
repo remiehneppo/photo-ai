@@ -85,6 +85,13 @@ export function upscaleImage(payload: { mode: string; image: File }) {
   return request<JobResponse>("/api/upscale", { method: "POST", body: form });
 }
 
+export function sharpenImage(payload: { mode: string; image: File }) {
+  const form = new FormData();
+  form.set("mode", payload.mode);
+  form.set("image", payload.image);
+  return request<JobResponse>("/api/sharpen", { method: "POST", body: form });
+}
+
 export function outpaintImage(payload: { prompt: string; style: Style; direction: Direction; image: File }) {
   const form = new FormData();
   form.set("prompt", payload.prompt);
