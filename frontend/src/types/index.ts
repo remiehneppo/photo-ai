@@ -1,5 +1,6 @@
 export type Style = "realistic" | "anime" | "advertisement" | "portrait" | "artistic";
 export type Direction = "left" | "right" | "top" | "bottom" | "all";
+export type ControlMode = "edges" | "depth" | "pose" | "product_layout";
 export type JobStatus = "pending" | "processing" | "done" | "failed";
 
 export type User = {

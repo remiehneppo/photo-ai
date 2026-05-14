@@ -84,6 +84,8 @@ Rủi ro:
 
 ## Phase C - ControlNet Reference
 
+Trạng thái: CODE DONE, chờ copy ControlNet models để E2E thật.
+
 Mục tiêu:
 - Cho user upload reference image để giữ pose, edge hoặc depth.
 
@@ -123,6 +125,16 @@ Tests:
 Rủi ro:
 - ControlNet SD 1.5 model không dùng được với SDXL checkpoint.
 - Cần capability check theo model base: SD 1.5 vs XL.
+
+Đã triển khai:
+- Backend helper chọn ControlNet model theo mode: `edges`, `depth`, `pose`, `product_layout`.
+- Endpoint multipart `POST /api/generate/reference`.
+- `POST /api/edit` nhận thêm optional `control_image`, `control_mode`, `control_weight`.
+- FE `Reference control` cho Generate/Edit, tự ẩn upload khi A1111 chưa có ControlNet model.
+- Unit/UI tests cho ControlNet payload và reference upload.
+
+Chưa E2E thật:
+- `/controlnet/model_list` đang trả `[]`, cần copy model vào `extensions/sd-webui-controlnet/models/`.
 
 ## Phase D - Object Remove/Replace
 

@@ -178,6 +178,38 @@ def test_generate_route_can_enable_adetailer(monkeypatch):
     assert adetailer_args[3]["ad_model"] == "hand_yolov8n.pt"
 
 
+def test_generate_with_reference_adds_controlnet_payload(monkeypatch):
+    factory = session_factory()
+    db = factory()
+    user = seed_user(db)
+    fake = FakeA1111()
+    patch_common(monkeypatch, generate, factory, fake)
+    tasks = CapturedTasks()
+
+    response = asyncio.run(call_and_run_tasks(
+        generate.generate_with_reference(
+            background_tasks=tasks,
+            prompt="cinematic portrait",
+            style="realistic",
+            control_mode="edges",
+            control_weight=0.8,
+            fix_face=False,
+            fix_hands=False,
+            control_image=Upload(),
+            db=db,
+            current_user=user,
+        ),
+        tasks,
+    ))
+
+    assert response.status == "pending"
+    controlnet_unit = fake.payloads[0][1]["alwayson_scripts"]["ControlNet"]["args"][0]
+    assert controlnet_unit["image"] == "encoded-input"
+    assert controlnet_unit["module"] == "canny"
+    assert controlnet_unit["model"] == "control_v11p_sd15_canny"
+    assert controlnet_unit["weight"] == 0.8
+
+
 def test_edit_route_saves_input_and_output(monkeypatch):
     factory = session_factory()
     db = factory()
@@ -202,6 +234,37 @@ def test_edit_route_saves_input_and_output(monkeypatch):
     assert {image.type for image in images} == {"input", "output"}
     assert fake.payloads[0][0] == "img2img"
     assert fake.payloads[0][1]["init_images"] == ["encoded-input"]
+
+
+def test_edit_route_can_add_controlnet_payload(monkeypatch):
+    factory = session_factory()
+    db = factory()
+    user = seed_user(db)
+    fake = FakeA1111()
+    patch_common(monkeypatch, edit, factory, fake)
+    tasks = CapturedTasks()
+
+    response = asyncio.run(call_and_run_tasks(
+        edit.edit_image(
+            background_tasks=tasks,
+            prompt="make it dramatic",
+            style="realistic",
+            fix_face=False,
+            fix_hands=False,
+            control_mode="edges",
+            control_weight=0.9,
+            image=Upload(),
+            control_image=Upload(),
+            db=db,
+            current_user=user,
+        ),
+        tasks,
+    ))
+
+    assert response.status == "pending"
+    controlnet_unit = fake.payloads[0][1]["alwayson_scripts"]["ControlNet"]["args"][0]
+    assert controlnet_unit["module"] == "canny"
+    assert controlnet_unit["weight"] == 0.9
 
 
 def test_upscale_route_uses_upscale_endpoint(monkeypatch):

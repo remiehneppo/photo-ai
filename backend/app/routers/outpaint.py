@@ -79,11 +79,13 @@ async def outpaint_image(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    fix_face_enabled = fix_face is True
+    fix_hands_enabled = fix_hands is True
     if style not in VALID_STYLES:
         raise HTTPException(status_code=400, detail=f"Invalid style. Choose from: {VALID_STYLES}")
     if direction not in VALID_DIRECTIONS:
         raise HTTPException(status_code=400, detail=f"Invalid direction. Choose from: {VALID_DIRECTIONS}")
-    if (fix_face or fix_hands) and not await has_adetailer(a1111):
+    if (fix_face_enabled or fix_hands_enabled) and not await has_adetailer(a1111):
         raise HTTPException(status_code=400, detail="ADetailer is not available in A1111")
 
     image_bytes = await image.read()
@@ -129,7 +131,7 @@ async def outpaint_image(
             "cfg_scale": preset["cfg_scale"],
             "sampler_name": preset["sampler_name"],
         }
-        adetailer = build_adetailer_scripts(fix_face, fix_hands)
+        adetailer = build_adetailer_scripts(fix_face_enabled, fix_hands_enabled)
         if adetailer:
             payload["alwayson_scripts"] = adetailer
         images = await a1111.img2img(payload)

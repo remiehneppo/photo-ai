@@ -70,6 +70,7 @@ async function mockApi(page: Page) {
 
     const jobStarts: Record<string, string> = {
       "/api/generate": "txt2img",
+      "/api/generate/reference": "txt2img",
       "/api/edit": "img2img",
       "/api/upscale": "upscale",
       "/api/sharpen": "sharpen",
@@ -183,6 +184,9 @@ test("generate tab lets a creator choose style, submit prompt, and see result", 
   await expect(page.getByRole("navigation").getByRole("button", { name: "Generate" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Generate" }).last()).toBeDisabled();
   await page.getByRole("button", { name: "Anime" }).click();
+  await expect(page.getByText("Reference control")).toBeVisible();
+  await uploadImage(page);
+  await page.getByRole("button", { name: "Pose" }).click();
   await page.getByLabel("Fix face").check();
   await page.getByPlaceholder("Describe the image you want...").fill("cinematic portrait in neon rain");
   await page.getByRole("button", { name: "Generate" }).last().click();

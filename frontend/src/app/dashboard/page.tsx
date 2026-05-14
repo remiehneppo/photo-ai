@@ -8,8 +8,8 @@ import { JobStatus } from "@/components/JobStatus";
 import { PromptInput } from "@/components/PromptInput";
 import { StyleSelector } from "@/components/StyleSelector";
 import { clearToken, getToken } from "@/lib/auth";
-import { editImage, generateImage, getCapabilities, listJobs, me, outpaintImage, sharpenImage, upscaleImage } from "@/lib/api";
-import type { Capabilities, Direction, JobDetail, Style, User } from "@/types";
+import { editImage, generateImage, generateImageWithReference, getCapabilities, listJobs, me, outpaintImage, sharpenImage, upscaleImage } from "@/lib/api";
+import type { Capabilities, ControlMode, Direction, JobDetail, Style, User } from "@/types";
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Brush, Clock3, Expand, ImageUp, LogOut, SlidersHorizontal, Sparkles, Wand2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
@@ -122,6 +122,9 @@ function GenerateTab({ capabilities }: { capabilities: Capabilities | null }) {
   const [style, setStyle] = useState<Style>("realistic");
   const [fixFace, setFixFace] = useState(false);
   const [fixHands, setFixHands] = useState(false);
+  const [controlImage, setControlImage] = useState<File | null>(null);
+  const [controlMode, setControlMode] = useState<ControlMode>("edges");
+  const [controlWeight, setControlWeight] = useState(0.7);
   const [jobId, setJobId] = useState<string | null>(null);
   const [result, setResult] = useState<JobDetail | null>(null);
   const [error, setError] = useState("");
@@ -133,7 +136,9 @@ function GenerateTab({ capabilities }: { capabilities: Capabilities | null }) {
     setLoading(true);
     setResult(null);
     try {
-      const job = await generateImage({ prompt, style, fix_face: fixFace, fix_hands: fixHands });
+      const job = controlImage
+        ? await generateImageWithReference({ prompt, style, control_image: controlImage, control_mode: controlMode, control_weight: controlWeight, fix_face: fixFace, fix_hands: fixHands })
+        : await generateImage({ prompt, style, fix_face: fixFace, fix_hands: fixHands });
       setJobId(job.job_id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start generation");
@@ -147,6 +152,15 @@ function GenerateTab({ capabilities }: { capabilities: Capabilities | null }) {
       <form onSubmit={submit} className="grid gap-4">
         <StyleSelector value={style} onChange={setStyle} />
         <PromptInput value={prompt} onChange={setPrompt} />
+        <ReferenceControl
+          capabilities={capabilities}
+          file={controlImage}
+          mode={controlMode}
+          weight={controlWeight}
+          onFile={setControlImage}
+          onMode={setControlMode}
+          onWeight={setControlWeight}
+        />
         <FixOptions capabilities={capabilities} fixFace={fixFace} fixHands={fixHands} onFixFace={setFixFace} onFixHands={setFixHands} />
         {error && <p className="text-sm text-danger">{error}</p>}
         <ActionButton disabled={loading || !prompt.trim()} icon={<Wand2 className="h-4 w-4" />}>
@@ -166,6 +180,9 @@ function EditTab({ capabilities }: { capabilities: Capabilities | null }) {
   const [style, setStyle] = useState<Style>("realistic");
   const [fixFace, setFixFace] = useState(false);
   const [fixHands, setFixHands] = useState(false);
+  const [controlImage, setControlImage] = useState<File | null>(null);
+  const [controlMode, setControlMode] = useState<ControlMode>("edges");
+  const [controlWeight, setControlWeight] = useState(0.7);
   const [file, setFile] = useState<File | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [result, setResult] = useState<JobDetail | null>(null);
@@ -179,7 +196,16 @@ function EditTab({ capabilities }: { capabilities: Capabilities | null }) {
     setLoading(true);
     setResult(null);
     try {
-      const job = await editImage({ prompt, style, image: file, fix_face: fixFace, fix_hands: fixHands });
+      const job = await editImage({
+        prompt,
+        style,
+        image: file,
+        fix_face: fixFace,
+        fix_hands: fixHands,
+        control_image: controlImage,
+        control_mode: controlMode,
+        control_weight: controlWeight
+      });
       setJobId(job.job_id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start edit");
@@ -194,6 +220,15 @@ function EditTab({ capabilities }: { capabilities: Capabilities | null }) {
         <ImageUpload file={file} onChange={setFile} />
         <StyleSelector value={style} onChange={setStyle} />
         <PromptInput value={prompt} onChange={setPrompt} placeholder="Describe the change..." />
+        <ReferenceControl
+          capabilities={capabilities}
+          file={controlImage}
+          mode={controlMode}
+          weight={controlWeight}
+          onFile={setControlImage}
+          onMode={setControlMode}
+          onWeight={setControlWeight}
+        />
         <FixOptions capabilities={capabilities} fixFace={fixFace} fixHands={fixHands} onFixFace={setFixFace} onFixHands={setFixHands} />
         {error && <p className="text-sm text-danger">{error}</p>}
         <ActionButton disabled={loading || !file || !prompt.trim()} icon={<Brush className="h-4 w-4" />}>
@@ -297,6 +332,81 @@ function SharpenTab() {
         <ImageResult job={result} />
       </div>
     </Panel>
+  );
+}
+
+function ReferenceControl({
+  capabilities,
+  file,
+  mode,
+  weight,
+  onFile,
+  onMode,
+  onWeight
+}: {
+  capabilities: Capabilities | null;
+  file: File | null;
+  mode: ControlMode;
+  weight: number;
+  onFile: (file: File | null) => void;
+  onMode: (mode: ControlMode) => void;
+  onWeight: (weight: number) => void;
+}) {
+  const controlnetModels = capabilities?.controlnet_models ?? [];
+  const available = Boolean(capabilities?.controlnet_available && controlnetModels.length > 0);
+  const modes: Array<{ value: ControlMode; label: string }> = [
+    { value: "edges", label: "Edges" },
+    { value: "depth", label: "Depth" },
+    { value: "pose", label: "Pose" },
+    { value: "product_layout", label: "Product" }
+  ];
+
+  return (
+    <div className="grid gap-3 rounded-md border border-line bg-white p-3">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold">Reference control</div>
+          <div className="text-xs text-muted">{available ? `${controlnetModels.length} ControlNet models available` : "ControlNet model is not available in A1111."}</div>
+        </div>
+        {file && (
+          <button type="button" className="focus-ring rounded-md border border-line px-3 py-2 text-xs font-semibold hover:bg-panel" onClick={() => onFile(null)}>
+            Clear
+          </button>
+        )}
+      </div>
+      {available && (
+        <>
+          <ImageUpload file={file} onChange={onFile} />
+          <div className="grid gap-2 sm:grid-cols-4">
+            {modes.map((item) => (
+              <button
+                key={item.value}
+                type="button"
+                onClick={() => onMode(item.value)}
+                className={`focus-ring h-10 rounded-md border px-3 text-sm font-semibold ${
+                  mode === item.value ? "border-accent bg-accent text-white" : "border-line bg-white text-ink hover:bg-panel"
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+          <label className="grid gap-2 text-sm font-semibold">
+            Strength
+            <input
+              type="range"
+              min="0.1"
+              max="1.5"
+              step="0.1"
+              value={weight}
+              onChange={(event) => onWeight(Number(event.target.value))}
+              className="accent-accent"
+            />
+            <span className="text-xs text-muted">{weight.toFixed(1)}</span>
+          </label>
+        </>
+      )}
+    </div>
   );
 }
 

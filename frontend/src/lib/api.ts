@@ -1,7 +1,7 @@
 "use client";
 
 import { clearToken, getToken, setToken } from "@/lib/auth";
-import type { Capabilities, Direction, JobDetail, JobResponse, Style, TokenResponse, User } from "@/types";
+import type { Capabilities, ControlMode, Direction, JobDetail, JobResponse, Style, TokenResponse, User } from "@/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
@@ -74,13 +74,47 @@ export function generateImage(payload: { prompt: string; style: Style; fix_face?
   });
 }
 
-export function editImage(payload: { prompt: string; style: Style; image: File; fix_face?: boolean; fix_hands?: boolean }) {
+export function generateImageWithReference(payload: {
+  prompt: string;
+  style: Style;
+  control_image: File;
+  control_mode: ControlMode;
+  control_weight: number;
+  fix_face?: boolean;
+  fix_hands?: boolean;
+}) {
+  const form = new FormData();
+  form.set("prompt", payload.prompt);
+  form.set("style", payload.style);
+  form.set("control_image", payload.control_image);
+  form.set("control_mode", payload.control_mode);
+  form.set("control_weight", String(payload.control_weight));
+  form.set("fix_face", String(Boolean(payload.fix_face)));
+  form.set("fix_hands", String(Boolean(payload.fix_hands)));
+  return request<JobResponse>("/api/generate/reference", { method: "POST", body: form });
+}
+
+export function editImage(payload: {
+  prompt: string;
+  style: Style;
+  image: File;
+  fix_face?: boolean;
+  fix_hands?: boolean;
+  control_image?: File | null;
+  control_mode?: ControlMode;
+  control_weight?: number;
+}) {
   const form = new FormData();
   form.set("prompt", payload.prompt);
   form.set("style", payload.style);
   form.set("image", payload.image);
   form.set("fix_face", String(Boolean(payload.fix_face)));
   form.set("fix_hands", String(Boolean(payload.fix_hands)));
+  if (payload.control_image) {
+    form.set("control_image", payload.control_image);
+    form.set("control_mode", payload.control_mode || "edges");
+    form.set("control_weight", String(payload.control_weight ?? 0.7));
+  }
   return request<JobResponse>("/api/edit", { method: "POST", body: form });
 }
 
