@@ -10,6 +10,28 @@ Root A1111:
 /home/tieubaoca/AI/stable-diffusion-webui
 ```
 
+## Bảng tải nhanh
+
+| Ưu tiên | Tính năng | File/model cần tải | Link tải | Lưu vào |
+|---------|-----------|--------------------|----------|---------|
+| P0 | ADetailer face fix | `face_yolov8s.pt` | `https://huggingface.co/Bingsu/adetailer/blob/main/face_yolov8s.pt` | `/home/tieubaoca/AI/stable-diffusion-webui/models/adetailer/` |
+| P0 | ADetailer hand fix | `hand_yolov8n.pt` | `https://huggingface.co/Bingsu/adetailer/blob/main/hand_yolov8n.pt` | `/home/tieubaoca/AI/stable-diffusion-webui/models/adetailer/` |
+| P1 | ADetailer person mask | `person_yolov8s-seg.pt` | `https://huggingface.co/Bingsu/adetailer/blob/main/person_yolov8s-seg.pt` | `/home/tieubaoca/AI/stable-diffusion-webui/models/adetailer/` |
+| P0 | ControlNet edge/layout | `control_v11p_sd15_canny.pth` | `https://huggingface.co/lllyasviel/ControlNet-v1-1/blob/main/control_v11p_sd15_canny.pth` | `/home/tieubaoca/AI/stable-diffusion-webui/extensions/sd-webui-controlnet/models/` |
+| P0 | ControlNet depth/layout | `control_v11f1p_sd15_depth.pth` | `https://huggingface.co/lllyasviel/ControlNet-v1-1/blob/main/control_v11f1p_sd15_depth.pth` | `/home/tieubaoca/AI/stable-diffusion-webui/extensions/sd-webui-controlnet/models/` |
+| P0 | ControlNet pose | `control_v11p_sd15_openpose.pth` | `https://huggingface.co/lllyasviel/ControlNet-v1-1/blob/main/control_v11p_sd15_openpose.pth` | `/home/tieubaoca/AI/stable-diffusion-webui/extensions/sd-webui-controlnet/models/` |
+| P1 | ControlNet inpaint | `control_v11p_sd15_inpaint.pth` | `https://huggingface.co/lllyasviel/ControlNet-v1-1/blob/main/control_v11p_sd15_inpaint.pth` | `/home/tieubaoca/AI/stable-diffusion-webui/extensions/sd-webui-controlnet/models/` |
+| P1 | ControlNet tile/detail upscale | `control_v11f1e_sd15_tile.pth` | `https://huggingface.co/lllyasviel/ControlNet-v1-1/blob/main/control_v11f1e_sd15_tile.pth` | `/home/tieubaoca/AI/stable-diffusion-webui/extensions/sd-webui-controlnet/models/` |
+| P2 | ControlNet SDXL | `xinsir/controlnet-union-sdxl-1.0` files | `https://huggingface.co/xinsir/controlnet-union-sdxl-1.0` | `/home/tieubaoca/AI/stable-diffusion-webui/extensions/sd-webui-controlnet/models/` |
+| P1 | SAM lightweight mask | `sam_vit_b_01ec64.pth` | `https://huggingface.co/ybelkada/segment-anything/blob/main/checkpoints/sam_vit_b_01ec64.pth` | `/home/tieubaoca/AI/stable-diffusion-webui/models/sam/` |
+| P2 | SAM high quality mask | `sam_hq_vit_l.pth` | `https://huggingface.co/lkeab/hq-sam/blob/main/sam_hq_vit_l.pth` | `/home/tieubaoca/AI/stable-diffusion-webui/models/sam/` |
+| P1 | Upscale sharp | `4x-UltraSharp.pth` | `https://huggingface.co/Kim2091/UltraSharp/blob/main/4x-UltraSharp.pth` | `/home/tieubaoca/AI/stable-diffusion-webui/ESRGAN/` |
+
+Gợi ý tải tối thiểu để test các phase tiếp theo:
+- P0 trước: `face_yolov8s.pt`, `hand_yolov8n.pt`, ControlNet `canny`, `depth`, `openpose`.
+- P1 sau: ControlNet `inpaint`, `tile`, `sam_vit_b_01ec64.pth`, `4x-UltraSharp.pth`.
+- P2 khi cần chất lượng cao hoặc SDXL workflow: `person_yolov8s-seg.pt`, `sam_hq_vit_l.pth`, `xinsir/controlnet-union-sdxl-1.0`.
+
 ## 1. ADetailer - auto fix face/hand
 
 Tính năng dùng cho:
