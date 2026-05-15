@@ -87,6 +87,10 @@ export function getCapabilities() {
   return request<Capabilities>("/api/capabilities");
 }
 
+export function getStyles() {
+  return request<{ styles: Style[] }>("/api/generate/styles");
+}
+
 export function generateImage(payload: { prompt: string; style: Style; fix_face?: boolean; fix_hands?: boolean }) {
   return request<JobResponse>("/api/generate", {
     method: "POST",

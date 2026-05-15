@@ -2,7 +2,7 @@
 
 import type { Style } from "@/types";
 
-const styles: Array<{ value: Style; label: string }> = [
+const fallbackStyles: Array<{ value: Style; label: string }> = [
   { value: "realistic", label: "Realistic" },
   { value: "anime", label: "Anime" },
   { value: "advertisement", label: "Advertisement" },
@@ -10,7 +10,7 @@ const styles: Array<{ value: Style; label: string }> = [
   { value: "artistic", label: "Artistic" }
 ];
 
-export function StyleSelector({ value, onChange }: { value: Style; onChange: (style: Style) => void }) {
+export function StyleSelector({ value, onChange, styles = fallbackStyles }: { value: Style; onChange: (style: Style) => void; styles?: Array<{ value: Style; label: string }> }) {
   return (
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
       {styles.map((style) => (

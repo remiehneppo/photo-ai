@@ -8,7 +8,7 @@ import { JobStatus } from "@/components/JobStatus";
 import { PromptInput } from "@/components/PromptInput";
 import { StyleSelector } from "@/components/StyleSelector";
 import { clearToken, getToken } from "@/lib/auth";
-import { editImage, generateImage, generateImageWithReference, getCapabilities, listJobs, me, outpaintImage, sharpenImage, upscaleImage } from "@/lib/api";
+import { editImage, generateImage, generateImageWithReference, getCapabilities, getStyles, listJobs, me, outpaintImage, sharpenImage, upscaleImage } from "@/lib/api";
 import type { Capabilities, ControlMode, Direction, JobDetail, Style, User } from "@/types";
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Brush, Clock3, Expand, ImageUp, LogOut, SlidersHorizontal, Sparkles, Wand2 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -16,6 +16,14 @@ import type { ReactNode } from "react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 type Tab = "generate" | "edit" | "upscale" | "sharpen" | "outpaint" | "history";
+
+const fallbackStyles = ["realistic", "anime", "advertisement", "portrait", "artistic"].map((style) => ({
+  value: style,
+  label: style
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ")
+}));
 
 const tabs: Array<{ id: Tab; label: string; icon: ReactNode }> = [
   { id: "generate", label: "Generate", icon: <Sparkles className="h-4 w-4" /> },
@@ -30,6 +38,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [capabilities, setCapabilities] = useState<Capabilities | null>(null);
+  const [styles, setStyles] = useState(fallbackStyles);
   const [tab, setTab] = useState<Tab>("generate");
 
   useEffect(() => {
@@ -39,6 +48,18 @@ export default function DashboardPage() {
     }
     me().then(setUser).catch(() => router.replace("/login"));
     getCapabilities().then(setCapabilities).catch(() => setCapabilities(null));
+    getStyles()
+      .then((data) => {
+        const nextStyles = data.styles.map((style) => ({
+          value: style,
+          label: style
+            .split("_")
+            .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+            .join(" ")
+        }));
+        if (nextStyles.length > 0) setStyles(nextStyles);
+      })
+      .catch(() => setStyles(fallbackStyles));
   }, [router]);
 
   function logout() {
@@ -79,11 +100,11 @@ export default function DashboardPage() {
         </nav>
 
         <section className="min-w-0">
-          {tab === "generate" && <GenerateTab capabilities={capabilities} />}
-          {tab === "edit" && <EditTab capabilities={capabilities} />}
+          {tab === "generate" && <GenerateTab capabilities={capabilities} styles={styles} />}
+          {tab === "edit" && <EditTab capabilities={capabilities} styles={styles} />}
           {tab === "upscale" && <UpscaleTab />}
           {tab === "sharpen" && <SharpenTab />}
-          {tab === "outpaint" && <OutpaintTab capabilities={capabilities} />}
+          {tab === "outpaint" && <OutpaintTab capabilities={capabilities} styles={styles} />}
           {tab === "history" && <HistoryTab />}
         </section>
       </div>
@@ -117,7 +138,7 @@ function Panel({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function GenerateTab({ capabilities }: { capabilities: Capabilities | null }) {
+function GenerateTab({ capabilities, styles }: { capabilities: Capabilities | null; styles: typeof fallbackStyles }) {
   const [prompt, setPrompt] = useState("");
   const [style, setStyle] = useState<Style>("realistic");
   const [fixFace, setFixFace] = useState(false);
@@ -150,7 +171,7 @@ function GenerateTab({ capabilities }: { capabilities: Capabilities | null }) {
   return (
     <Panel title="Generate">
       <form onSubmit={submit} className="grid gap-4">
-        <StyleSelector value={style} onChange={setStyle} />
+        <StyleSelector value={style} onChange={setStyle} styles={styles} />
         <PromptInput value={prompt} onChange={setPrompt} />
         <ReferenceControl
           capabilities={capabilities}
@@ -175,7 +196,7 @@ function GenerateTab({ capabilities }: { capabilities: Capabilities | null }) {
   );
 }
 
-function EditTab({ capabilities }: { capabilities: Capabilities | null }) {
+function EditTab({ capabilities, styles }: { capabilities: Capabilities | null; styles: typeof fallbackStyles }) {
   const [prompt, setPrompt] = useState("");
   const [style, setStyle] = useState<Style>("realistic");
   const [fixFace, setFixFace] = useState(false);
@@ -218,7 +239,7 @@ function EditTab({ capabilities }: { capabilities: Capabilities | null }) {
     <Panel title="Edit">
       <form onSubmit={submit} className="grid gap-4">
         <ImageUpload file={file} onChange={setFile} />
-        <StyleSelector value={style} onChange={setStyle} />
+        <StyleSelector value={style} onChange={setStyle} styles={styles} />
         <PromptInput value={prompt} onChange={setPrompt} placeholder="Describe the change..." />
         <ReferenceControl
           capabilities={capabilities}
@@ -416,7 +437,7 @@ function ReferenceControl({
   );
 }
 
-function OutpaintTab({ capabilities }: { capabilities: Capabilities | null }) {
+function OutpaintTab({ capabilities, styles }: { capabilities: Capabilities | null; styles: typeof fallbackStyles }) {
   const [prompt, setPrompt] = useState("");
   const [style, setStyle] = useState<Style>("realistic");
   const [fixFace, setFixFace] = useState(false);
@@ -449,7 +470,7 @@ function OutpaintTab({ capabilities }: { capabilities: Capabilities | null }) {
       <form onSubmit={submit} className="grid gap-4">
         <ImageUpload file={file} onChange={setFile} />
         <DirectionSelector value={direction} onChange={setDirection} />
-        <StyleSelector value={style} onChange={setStyle} />
+        <StyleSelector value={style} onChange={setStyle} styles={styles} />
         <PromptInput value={prompt} onChange={setPrompt} placeholder="Optional context for the new area..." />
         <FixOptions capabilities={capabilities} fixFace={fixFace} fixHands={fixHands} onFixFace={setFixFace} onFixHands={setFixHands} />
         {error && <p className="text-sm text-danger">{error}</p>}

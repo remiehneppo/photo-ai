@@ -22,7 +22,8 @@ def make_session_factory():
 
 def seed_job(session_factory, job_id="job-1"):
     db = session_factory()
-    db.add(User(id="user-1", email="a@example.com", username="alice", hashed_password="hash"))
+    if not db.query(User).filter(User.id == "user-1").first():
+        db.add(User(id="user-1", email="a@example.com", username="alice", hashed_password="hash"))
     db.add(Job(id=job_id, user_id="user-1", feature="txt2img", status="pending"))
     db.commit()
     db.close()
@@ -71,6 +72,25 @@ def test_run_job_marks_failure(monkeypatch):
     assert job.completed_at is not None
 
 
+def test_run_job_marks_failure_with_fallback_message(monkeypatch):
+    session_factory = make_session_factory()
+    seed_job(session_factory)
+    monkeypatch.setattr(job_service, "SessionLocal", session_factory)
+
+    class EmptyError(Exception):
+        def __str__(self):
+            return ""
+
+    async def task():
+        raise EmptyError()
+
+    asyncio.run(job_service.run_job("job-1", task))
+
+    job = get_job(session_factory)
+    assert job.status == "failed"
+    assert job.error_message == "EmptyError: AI job failed without a detailed error message"
+
+
 def test_update_job_progress_sets_user_visible_fields(monkeypatch):
     session_factory = make_session_factory()
     seed_job(session_factory)
@@ -93,3 +113,34 @@ def test_update_job_progress_sets_user_visible_fields(monkeypatch):
     assert job.eta_seconds == 12
     assert job.estimated_seconds == 30
     assert job.progress_label == "Step 4 of 10"
+
+
+def test_a1111_jobs_run_serially(monkeypatch):
+    session_factory = make_session_factory()
+    seed_job(session_factory, "job-1")
+    seed_job(session_factory, "job-2")
+    monkeypatch.setattr(job_service, "SessionLocal", session_factory)
+    events = []
+
+    async def progress():
+        return {}
+
+    async def task_one():
+        events.append("one-start")
+        await asyncio.sleep(0.01)
+        events.append("one-end")
+
+    async def task_two():
+        events.append("two-start")
+        await asyncio.sleep(0.01)
+        events.append("two-end")
+
+    async def run_both():
+        await asyncio.gather(
+            job_service.run_job("job-1", task_one, progress),
+            job_service.run_job("job-2", task_two, progress),
+        )
+
+    asyncio.run(run_both())
+
+    assert events in (["one-start", "one-end", "two-start", "two-end"], ["two-start", "two-end", "one-start", "one-end"])

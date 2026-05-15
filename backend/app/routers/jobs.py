@@ -1,5 +1,5 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
@@ -43,8 +43,8 @@ class JobDetail(BaseModel):
 def list_jobs(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    skip: int = 0,
-    limit: int = 20,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=50),
 ):
     jobs = (
         db.query(Job)
@@ -54,7 +54,8 @@ def list_jobs(
         .limit(limit)
         .all()
     )
-    return [_build_job_detail(job, db) for job in jobs]
+    images_by_job = _images_by_job(db, [job.id for job in jobs])
+    return [_build_job_detail(job, db, images_by_job.get(job.id, [])) for job in jobs]
 
 
 @router.get("/{job_id}", response_model=JobDetail)
@@ -69,8 +70,9 @@ def get_job(
     return _build_job_detail(job, db)
 
 
-def _build_job_detail(job: Job, db: Session) -> JobDetail:
-    images = db.query(Image).filter(Image.job_id == job.id).all()
+def _build_job_detail(job: Job, db: Session, images: list[Image] | None = None) -> JobDetail:
+    if images is None:
+        images = db.query(Image).filter(Image.job_id == job.id).all()
     image_outs = [
         ImageOut(
             id=img.id,
@@ -97,3 +99,13 @@ def _build_job_detail(job: Job, db: Session) -> JobDetail:
         completed_at=job.completed_at,
         images=image_outs,
     )
+
+
+def _images_by_job(db: Session, job_ids: list[str]) -> dict[str, list[Image]]:
+    if not job_ids:
+        return {}
+    rows = db.query(Image).filter(Image.job_id.in_(job_ids)).all()
+    grouped: dict[str, list[Image]] = {job_id: [] for job_id in job_ids}
+    for image in rows:
+        grouped.setdefault(image.job_id, []).append(image)
+    return grouped

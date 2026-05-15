@@ -14,6 +14,7 @@ from app.models.user import User
 from app.services.auth_service import get_current_user
 from app.services.job_service import run_job, update_job_progress
 from app.services.storage_service import save_output, save_upload
+from app.services.upload_service import read_image_upload
 
 router = APIRouter(prefix="/api/sharpen", tags=["sharpen"])
 
@@ -40,7 +41,7 @@ async def sharpen_image(
     if mode not in SHARPEN_PRESETS:
         raise HTTPException(status_code=400, detail=f"Invalid mode. Choose from: {list(SHARPEN_PRESETS)}")
 
-    image_bytes = await image.read()
+    image_bytes = await read_image_upload(image)
     file_path, filename = await save_upload(image_bytes)
 
     job = Job(

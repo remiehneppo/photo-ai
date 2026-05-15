@@ -28,7 +28,9 @@ def get_preset(feature: str, style: str) -> dict[str, Any]:
 def get_upscale_preset(mode: str = "default") -> dict[str, Any]:
     config = _load_config()
     upscale = config.get("presets", {}).get("upscale", {})
-    preset = upscale.get(mode, upscale.get("default", {}))
+    preset = upscale.get(mode)
+    if preset is None:
+        raise ValueError(f"No upscale preset for mode='{mode}'")
     return dict(preset)
 
 
@@ -46,3 +48,8 @@ def merge_prompt(base_positive: str, user_prompt: str) -> str:
 def available_styles(feature: str) -> list[str]:
     config = _load_config()
     return list(config.get("presets", {}).get(feature, {}).keys())
+
+
+def available_upscale_modes() -> list[str]:
+    config = _load_config()
+    return list(config.get("presets", {}).get("upscale", {}).keys())

@@ -1,10 +1,15 @@
 "use client";
 
 import { ImagePlus } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 
 export function ImageUpload({ file, onChange }: { file: File | null; onChange: (file: File | null) => void }) {
   const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
+
+  useEffect(() => {
+    if (!previewUrl) return;
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [previewUrl]);
 
   return (
     <label className="focus-within:ring-accent flex min-h-48 cursor-pointer flex-col items-center justify-center rounded-md border border-dashed border-line bg-white p-4 text-center transition hover:bg-panel focus-within:ring-2">

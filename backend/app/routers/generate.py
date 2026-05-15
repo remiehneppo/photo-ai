@@ -13,12 +13,10 @@ from app.services.preset_service import get_preset, merge_prompt, available_styl
 from app.services.a1111_client import a1111
 from app.services.storage_service import save_output, get_image_url
 from app.services.job_service import run_job
+from app.services.upload_service import read_image_upload
 import uuid
 
 router = APIRouter(prefix="/api/generate", tags=["generate"])
-
-VALID_STYLES = ["realistic", "anime", "advertisement", "portrait", "artistic"]
-
 
 class GenerateRequest(BaseModel):
     prompt: str
@@ -39,8 +37,9 @@ async def generate(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if req.style not in VALID_STYLES:
-        raise HTTPException(status_code=400, detail=f"Invalid style. Choose from: {VALID_STYLES}")
+    valid_styles = available_styles("txt2img")
+    if req.style not in valid_styles:
+        raise HTTPException(status_code=400, detail=f"Invalid style. Choose from: {valid_styles}")
     if (req.fix_face or req.fix_hands) and not await has_adetailer(a1111):
         raise HTTPException(status_code=400, detail="ADetailer is not available in A1111")
 
@@ -118,12 +117,13 @@ async def generate_with_reference(
 ):
     fix_face_enabled = fix_face is True
     fix_hands_enabled = fix_hands is True
-    if style not in VALID_STYLES:
-        raise HTTPException(status_code=400, detail=f"Invalid style. Choose from: {VALID_STYLES}")
+    valid_styles = available_styles("txt2img")
+    if style not in valid_styles:
+        raise HTTPException(status_code=400, detail=f"Invalid style. Choose from: {valid_styles}")
     if (fix_face_enabled or fix_hands_enabled) and not await has_adetailer(a1111):
         raise HTTPException(status_code=400, detail="ADetailer is not available in A1111")
 
-    reference_bytes = await control_image.read()
+    reference_bytes = await read_image_upload(control_image)
     b64_reference = a1111.encode_image(reference_bytes)
     try:
         controlnet = await build_controlnet_scripts(a1111, b64_reference, control_mode, control_weight)
@@ -193,4 +193,4 @@ async def generate_with_reference(
 
 @router.get("/styles")
 def get_styles():
-    return {"styles": VALID_STYLES}
+    return {"styles": available_styles("txt2img")}

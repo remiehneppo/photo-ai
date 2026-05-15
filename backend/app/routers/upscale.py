@@ -1,15 +1,16 @@
 import uuid
-from fastapi import APIRouter, Depends, BackgroundTasks, UploadFile, File, Form
+from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from app.database import get_db, SessionLocal
 from app.models.user import User
 from app.models.job import Job
 from app.models.image import Image
 from app.services.auth_service import get_current_user
-from app.services.preset_service import get_upscale_preset
+from app.services.preset_service import available_upscale_modes, get_upscale_preset
 from app.services.a1111_client import a1111
 from app.services.storage_service import save_upload, save_output
 from app.services.job_service import run_job
+from app.services.upload_service import read_image_upload
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/upscale", tags=["upscale"])
@@ -28,10 +29,13 @@ async def upscale_image(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    image_bytes = await image.read()
-    file_path, filename = await save_upload(image_bytes)
+    try:
+        preset = get_upscale_preset(mode)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid mode. Choose from: {available_upscale_modes()}") from exc
 
-    preset = get_upscale_preset(mode)
+    image_bytes = await read_image_upload(image)
+    file_path, filename = await save_upload(image_bytes)
     job = Job(
         id=str(uuid.uuid4()),
         user_id=current_user.id,

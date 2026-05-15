@@ -82,6 +82,11 @@ async function mockApi(
       return;
     }
 
+    if (url.pathname === "/api/generate/styles") {
+      await fulfillJson(route, { styles: ["realistic", "anime", "advertisement", "portrait", "artistic"] });
+      return;
+    }
+
     const jobStarts: Record<string, string> = {
       "/api/generate": "txt2img",
       "/api/generate/reference": "txt2img",

@@ -11,21 +11,20 @@ from app.services.auth_service import get_current_user
 from app.services.adetailer_service import build_adetailer_scripts, has_adetailer
 from app.services.controlnet_service import build_controlnet_scripts, merge_alwayson_scripts
 from app.services.model_service import add_model_override, resolve_checkpoint
-from app.services.preset_service import get_preset, merge_prompt
+from app.services.preset_service import available_styles, get_preset, merge_prompt
 from app.services.a1111_client import a1111
 from app.services.storage_service import save_upload, save_output
 from app.services.job_service import run_job
+from app.services.upload_service import read_image_upload, validate_image_bytes
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/edit", tags=["edit"])
 
-VALID_STYLES = ["realistic", "anime", "advertisement", "portrait", "artistic"]
-
-
 def get_image_size(image_bytes: bytes) -> tuple[int, int]:
     try:
-        with PILImage.open(BytesIO(image_bytes)) as img:
-            return img.size
+        return validate_image_bytes(image_bytes)
+    except HTTPException:
+        raise
     except UnidentifiedImageError as exc:
         raise HTTPException(status_code=400, detail="Uploaded image is not a valid image file") from exc
 
@@ -64,17 +63,18 @@ async def edit_image(
 ):
     fix_face_enabled = fix_face is True
     fix_hands_enabled = fix_hands is True
-    if style not in VALID_STYLES:
-        raise HTTPException(status_code=400, detail=f"Invalid style. Choose from: {VALID_STYLES}")
+    valid_styles = available_styles("img2img")
+    if style not in valid_styles:
+        raise HTTPException(status_code=400, detail=f"Invalid style. Choose from: {valid_styles}")
     if (fix_face_enabled or fix_hands_enabled) and not await has_adetailer(a1111):
         raise HTTPException(status_code=400, detail="ADetailer is not available in A1111")
 
-    image_bytes = await image.read()
+    image_bytes = await read_image_upload(image)
     source_width, source_height = get_image_size(image_bytes)
     file_path, filename = await save_upload(image_bytes)
     controlnet = {}
     if control_image is not None and hasattr(control_image, "read"):
-        reference_bytes = await control_image.read()
+        reference_bytes = await read_image_upload(control_image)
         try:
             controlnet = await build_controlnet_scripts(a1111, a1111.encode_image(reference_bytes), control_mode or "edges", control_weight)
         except ValueError as exc:

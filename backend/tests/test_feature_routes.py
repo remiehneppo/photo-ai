@@ -70,16 +70,12 @@ class FakeA1111:
 
 class Upload:
     async def read(self):
-        return b"input-bytes"
+        return png_bytes()
 
 
 class PngUpload:
     async def read(self):
-        return (
-            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
-            b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\xff\xff?"
-            b"\x00\x05\xfe\x02\xfeA\xde\x83\xb1\x00\x00\x00\x00IEND\xaeB`\x82"
-        )
+        return png_bytes()
 
 
 def png_bytes(width=17, height=11):
@@ -412,13 +408,54 @@ def test_jobs_route_returns_current_user_history():
     db.add(Image(id="image-1", job_id="job-1", user_id=user.id, type="output", file_path="/tmp/output.png", filename="output.png"))
     db.commit()
 
-    result = jobs.list_jobs(db=db, current_user=user)
+    result = jobs.list_jobs(db=db, current_user=user, skip=0, limit=20)
     detail = jobs.get_job(job_id="job-1", db=db, current_user=user)
 
     assert [job.id for job in result] == ["job-1"]
     assert detail.images[0].url == "/api/images/output/output.png"
     assert detail.progress_percent == 100
     assert detail.progress_label == "Complete"
+
+
+def test_jobs_route_clamps_to_requested_limit():
+    factory = session_factory()
+    db = factory()
+    user = seed_user(db)
+    for index in range(3):
+        db.add(Job(id=f"job-{index}", user_id=user.id, feature="txt2img", style="realistic", status="done", progress_percent=100))
+    db.commit()
+
+    result = jobs.list_jobs(db=db, current_user=user, skip=0, limit=2)
+
+    assert len(result) == 2
+
+
+def test_upscale_rejects_unknown_mode_before_upload_read(monkeypatch):
+    class UnreadableUpload:
+        async def read(self):
+            raise AssertionError("upload should not be read for an invalid mode")
+
+    factory = session_factory()
+    db = factory()
+    user = seed_user(db)
+    fake = FakeA1111()
+    patch_common(monkeypatch, upscale, factory, fake)
+    tasks = CapturedTasks()
+
+    try:
+        asyncio.run(
+            upscale.upscale_image(
+                background_tasks=tasks,
+                image=UnreadableUpload(),
+                mode="missing",
+                db=db,
+                current_user=user,
+            )
+        )
+    except Exception as exc:
+        assert getattr(exc, "status_code", None) == 400
+    else:
+        raise AssertionError("invalid upscale mode was accepted")
 
 
 def test_capabilities_route_reports_a1111_features(monkeypatch):

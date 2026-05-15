@@ -9,6 +9,7 @@ from app.database import SessionLocal
 logger = logging.getLogger("photo_ai.jobs")
 
 ProgressProvider = Callable[[], Awaitable[dict[str, Any]]]
+_a1111_job_lock = asyncio.Lock()
 
 
 async def run_job(
@@ -29,9 +30,13 @@ async def run_job(
         db.commit()
 
         if progress_provider:
-            monitor = asyncio.create_task(_monitor_progress(job_id, progress_provider))
-
-        await task_fn()
+            update_job_progress(job_id, progress_percent=1, progress_label="Waiting for AI engine")
+            async with _a1111_job_lock:
+                update_job_progress(job_id, progress_percent=2, progress_label="Starting AI engine")
+                monitor = asyncio.create_task(_monitor_progress(job_id, progress_provider))
+                await task_fn()
+        else:
+            await task_fn()
 
         job = db.query(Job).filter(Job.id == job_id).first()
         job.status = "done"
@@ -47,7 +52,7 @@ async def run_job(
         if job:
             job.status = "failed"
             job.progress_label = "Failed"
-            job.error_message = str(e)
+            job.error_message = _user_visible_error(e)
             job.completed_at = datetime.utcnow()
             db.commit()
     finally:
@@ -132,3 +137,10 @@ def _int_or_none(value: Any) -> int | None:
         return int(float(value))
     except (TypeError, ValueError):
         return None
+
+
+def _user_visible_error(exc: Exception) -> str:
+    message = str(exc).strip()
+    if message:
+        return message
+    return f"{type(exc).__name__}: AI job failed without a detailed error message"
