@@ -8,14 +8,15 @@ import { JobStatus } from "@/components/JobStatus";
 import { PromptInput } from "@/components/PromptInput";
 import { StyleSelector } from "@/components/StyleSelector";
 import { clearToken, getToken } from "@/lib/auth";
-import { editImage, generateImage, generateImageWithReference, getCapabilities, getStyles, listJobs, me, outpaintImage, sharpenImage, upscaleImage } from "@/lib/api";
-import type { Capabilities, ControlMode, Direction, JobDetail, Style, User } from "@/types";
+import { deleteJob, editImage, generateImage, generateImageWithReference, getCapabilities, getStyles, imageUrl, listJobs, me, outpaintImage, sharpenImage, upscaleImage } from "@/lib/api";
+import type { Capabilities, ControlMode, Direction, HistoryImageTarget, ImageOut, JobDetail, Style, User } from "@/types";
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Brush, Clock3, Expand, ImageUp, LogOut, SlidersHorizontal, Sparkles, Wand2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 type Tab = "generate" | "edit" | "upscale" | "sharpen" | "outpaint" | "history";
+type HistoryImageSeed = { target: HistoryImageTarget; file: File };
 
 const fallbackStyles = ["realistic", "anime", "advertisement", "portrait", "artistic"].map((style) => ({
   value: style,
@@ -40,6 +41,7 @@ export default function DashboardPage() {
   const [capabilities, setCapabilities] = useState<Capabilities | null>(null);
   const [styles, setStyles] = useState(fallbackStyles);
   const [tab, setTab] = useState<Tab>("generate");
+  const [historyImageSeed, setHistoryImageSeed] = useState<HistoryImageSeed | null>(null);
 
   useEffect(() => {
     if (!getToken()) {
@@ -65,6 +67,11 @@ export default function DashboardPage() {
   function logout() {
     clearToken();
     router.push("/login");
+  }
+
+  function useHistoryImage(target: HistoryImageTarget, file: File) {
+    setHistoryImageSeed({ target, file });
+    setTab(target);
   }
 
   return (
@@ -101,11 +108,11 @@ export default function DashboardPage() {
 
         <section className="min-w-0">
           {tab === "generate" && <GenerateTab capabilities={capabilities} styles={styles} />}
-          {tab === "edit" && <EditTab capabilities={capabilities} styles={styles} />}
-          {tab === "upscale" && <UpscaleTab />}
-          {tab === "sharpen" && <SharpenTab />}
-          {tab === "outpaint" && <OutpaintTab capabilities={capabilities} styles={styles} />}
-          {tab === "history" && <HistoryTab />}
+          {tab === "edit" && <EditTab capabilities={capabilities} styles={styles} historyImageSeed={historyImageSeed} />}
+          {tab === "upscale" && <UpscaleTab historyImageSeed={historyImageSeed} />}
+          {tab === "sharpen" && <SharpenTab historyImageSeed={historyImageSeed} />}
+          {tab === "outpaint" && <OutpaintTab capabilities={capabilities} styles={styles} historyImageSeed={historyImageSeed} />}
+          {tab === "history" && <HistoryTab onUseImage={useHistoryImage} />}
         </section>
       </div>
     </main>
@@ -196,7 +203,7 @@ function GenerateTab({ capabilities, styles }: { capabilities: Capabilities | nu
   );
 }
 
-function EditTab({ capabilities, styles }: { capabilities: Capabilities | null; styles: typeof fallbackStyles }) {
+function EditTab({ capabilities, styles, historyImageSeed }: { capabilities: Capabilities | null; styles: typeof fallbackStyles; historyImageSeed: HistoryImageSeed | null }) {
   const [prompt, setPrompt] = useState("");
   const [style, setStyle] = useState<Style>("realistic");
   const [fixFace, setFixFace] = useState(false);
@@ -204,7 +211,7 @@ function EditTab({ capabilities, styles }: { capabilities: Capabilities | null; 
   const [controlImage, setControlImage] = useState<File | null>(null);
   const [controlMode, setControlMode] = useState<ControlMode>("edges");
   const [controlWeight, setControlWeight] = useState(0.7);
-  const [file, setFile] = useState<File | null>(null);
+  const [file, setFile] = useState<File | null>(() => (historyImageSeed?.target === "edit" ? historyImageSeed.file : null));
   const [jobId, setJobId] = useState<string | null>(null);
   const [result, setResult] = useState<JobDetail | null>(null);
   const [error, setError] = useState("");
@@ -264,9 +271,9 @@ function EditTab({ capabilities, styles }: { capabilities: Capabilities | null; 
   );
 }
 
-function UpscaleTab() {
+function UpscaleTab({ historyImageSeed }: { historyImageSeed: HistoryImageSeed | null }) {
   const [mode, setMode] = useState("default");
-  const [file, setFile] = useState<File | null>(null);
+  const [file, setFile] = useState<File | null>(() => (historyImageSeed?.target === "upscale" ? historyImageSeed.file : null));
   const [jobId, setJobId] = useState<string | null>(null);
   const [result, setResult] = useState<JobDetail | null>(null);
   const [error, setError] = useState("");
@@ -310,9 +317,9 @@ function UpscaleTab() {
   );
 }
 
-function SharpenTab() {
+function SharpenTab({ historyImageSeed }: { historyImageSeed: HistoryImageSeed | null }) {
   const [mode, setMode] = useState("default");
-  const [file, setFile] = useState<File | null>(null);
+  const [file, setFile] = useState<File | null>(() => (historyImageSeed?.target === "sharpen" ? historyImageSeed.file : null));
   const [jobId, setJobId] = useState<string | null>(null);
   const [result, setResult] = useState<JobDetail | null>(null);
   const [error, setError] = useState("");
@@ -437,13 +444,13 @@ function ReferenceControl({
   );
 }
 
-function OutpaintTab({ capabilities, styles }: { capabilities: Capabilities | null; styles: typeof fallbackStyles }) {
+function OutpaintTab({ capabilities, styles, historyImageSeed }: { capabilities: Capabilities | null; styles: typeof fallbackStyles; historyImageSeed: HistoryImageSeed | null }) {
   const [prompt, setPrompt] = useState("");
   const [style, setStyle] = useState<Style>("realistic");
   const [fixFace, setFixFace] = useState(false);
   const [fixHands, setFixHands] = useState(false);
   const [direction, setDirection] = useState<Direction>("all");
-  const [file, setFile] = useState<File | null>(null);
+  const [file, setFile] = useState<File | null>(() => (historyImageSeed?.target === "outpaint" ? historyImageSeed.file : null));
   const [jobId, setJobId] = useState<string | null>(null);
   const [result, setResult] = useState<JobDetail | null>(null);
   const [error, setError] = useState("");
@@ -544,10 +551,12 @@ function DirectionSelector({ value, onChange }: { value: Direction; onChange: (d
   );
 }
 
-function HistoryTab() {
+function HistoryTab({ onUseImage }: { onUseImage: (target: HistoryImageTarget, file: File) => void }) {
   const [jobs, setJobs] = useState<JobDetail[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [busyJobId, setBusyJobId] = useState<string | null>(null);
+  const [busyImageId, setBusyImageId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -579,6 +588,36 @@ function HistoryTab() {
     };
   }, []);
 
+  async function removeJob(job: JobDetail) {
+    if (!window.confirm("Delete this history item? This cannot be undone.")) return;
+    setBusyJobId(job.id);
+    setError("");
+    try {
+      await deleteJob(job.id);
+      setJobs((current) => current.filter((item) => item.id !== job.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete history item");
+    } finally {
+      setBusyJobId(null);
+    }
+  }
+
+  async function useImage(target: HistoryImageTarget, image: ImageOut) {
+    setBusyImageId(image.id);
+    setError("");
+    try {
+      const response = await fetch(imageUrl(image.url));
+      if (!response.ok) throw new Error("Could not load image from history");
+      const blob = await response.blob();
+      const filename = image.filename || "history-image.png";
+      onUseImage(target, new File([blob], filename, { type: blob.type || "image/png" }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not use history image");
+    } finally {
+      setBusyImageId(null);
+    }
+  }
+
   return (
     <Panel title="History">
       <div className="mb-4 flex items-center justify-between gap-3">
@@ -588,7 +627,7 @@ function HistoryTab() {
         </ActionButton>
       </div>
       {error && <p className="mb-4 text-sm text-danger">{error}</p>}
-      <HistoryGrid jobs={jobs} />
+      <HistoryGrid jobs={jobs} busyJobId={busyJobId} busyImageId={busyImageId} onDelete={removeJob} onUseImage={useImage} />
     </Panel>
   );
 }

@@ -39,6 +39,7 @@ async function request<T>(path: string, init: RequestInit = {}) {
     logApiError({ path, method, status: response.status, requestId: response.headers.get("x-request-id"), message });
     throw new Error(message);
   }
+  if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
 
@@ -173,4 +174,8 @@ export function getJob(id: string) {
 
 export function listJobs() {
   return request<JobDetail[]>("/api/jobs");
+}
+
+export function deleteJob(id: string) {
+  return request<void>(`/api/jobs/${id}`, { method: "DELETE" });
 }

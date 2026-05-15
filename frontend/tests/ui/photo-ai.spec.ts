@@ -8,7 +8,7 @@ const png1x1 = Buffer.from(
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization,content-type",
-  "Access-Control-Allow-Methods": "GET,POST,OPTIONS"
+  "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS"
 };
 
 async function fulfillJson(route: Route, json: unknown, status = 200) {
@@ -34,6 +34,7 @@ async function mockApi(
   await page.route("http://localhost:8000/api/images/**", async (route) => {
     await route.fulfill({
       status: 200,
+      headers: corsHeaders,
       contentType: "image/png",
       body: png1x1
     });
@@ -45,6 +46,16 @@ async function mockApi(
 
     if (method === "OPTIONS") {
       await route.fulfill({ status: 204, headers: corsHeaders });
+      return;
+    }
+
+    if (url.pathname.startsWith("/api/images/")) {
+      await route.fulfill({
+        status: 200,
+        headers: corsHeaders,
+        contentType: "image/png",
+        body: png1x1
+      });
       return;
     }
 
@@ -130,6 +141,11 @@ async function mockApi(
     const jobMatch = url.pathname.match(/^\/api\/jobs\/(.+)$/);
     if (jobMatch) {
       const id = jobMatch[1];
+      if (method === "DELETE") {
+        jobs.delete(id);
+        await route.fulfill({ status: 204, headers: corsHeaders });
+        return;
+      }
       await fulfillJson(
         route,
         jobs.get(id) || {
@@ -272,6 +288,28 @@ test("history tab renders completed jobs and download affordance", async ({ page
   await expect(page.getByText("1 jobs")).toBeVisible();
   await expect(page.getByText("txt2img")).toBeVisible();
   await expect(page.getByTitle("Download")).toBeVisible();
+  await expect(page.getByTitle("Use in Edit")).toBeVisible();
+
+  page.once("dialog", async (dialog) => {
+    expect(dialog.message()).toContain("Delete this history item?");
+    await dialog.accept();
+  });
+  await page.getByTitle("Delete history item").click();
+  await expect(page.getByText("No jobs yet.")).toBeVisible();
+});
+
+test("history output can be reused as an input for image tools", async ({ page }) => {
+  await signIn(page);
+  await page.getByPlaceholder("Describe the image you want...").fill("history reuse seed");
+  await page.getByRole("button", { name: "Generate" }).last().click();
+  await expect(page.getByText("job-txt2img")).toBeVisible();
+
+  await page.getByRole("button", { name: "History" }).click();
+  await page.getByTitle("Use in Upscale").click();
+
+  await expect(page.getByRole("heading", { name: "Upscale" })).toBeVisible();
+  await page.getByRole("button", { name: "Upscale" }).last().click();
+  await expect(page.getByText("job-upscale")).toBeVisible();
 });
 
 test("dashboard remains usable on mobile width", async ({ page }) => {

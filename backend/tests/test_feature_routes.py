@@ -430,6 +430,44 @@ def test_jobs_route_clamps_to_requested_limit():
     assert len(result) == 2
 
 
+def test_delete_job_removes_only_current_user_history(monkeypatch):
+    factory = session_factory()
+    db = factory()
+    user = seed_user(db)
+    other = User(id="user-2", email="b@example.com", username="bob", hashed_password="hash")
+    db.add(other)
+    db.add(Job(id="job-1", user_id=user.id, feature="txt2img", style="realistic", status="done"))
+    db.add(Job(id="job-2", user_id=other.id, feature="txt2img", style="realistic", status="done"))
+    db.add(Image(id="image-1", job_id="job-1", user_id=user.id, type="output", file_path="/tmp/output.png", filename="output.png"))
+    db.commit()
+    deleted_paths = []
+    monkeypatch.setattr(jobs, "delete_image_file", deleted_paths.append)
+
+    response = jobs.delete_job(job_id="job-1", db=db, current_user=user)
+
+    assert response.status_code == 204
+    assert deleted_paths == ["/tmp/output.png"]
+    assert db.query(Job).filter(Job.id == "job-1").first() is None
+    assert db.query(Image).filter(Image.id == "image-1").first() is None
+    assert db.query(Job).filter(Job.id == "job-2").first() is not None
+
+
+def test_delete_job_rejects_active_job():
+    factory = session_factory()
+    db = factory()
+    user = seed_user(db)
+    db.add(Job(id="job-1", user_id=user.id, feature="txt2img", style="realistic", status="processing"))
+    db.commit()
+
+    try:
+        jobs.delete_job(job_id="job-1", db=db, current_user=user)
+    except Exception as exc:
+        assert getattr(exc, "status_code", None) == 409
+    else:
+        raise AssertionError("active job deletion was accepted")
+    assert db.query(Job).filter(Job.id == "job-1").first() is not None
+
+
 def test_upscale_rejects_unknown_mode_before_upload_read(monkeypatch):
     class UnreadableUpload:
         async def read(self):

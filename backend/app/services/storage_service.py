@@ -32,3 +32,19 @@ async def save_output(image_bytes: bytes) -> tuple[str, str]:
 
 def get_image_url(filename: str, image_type: str = "output") -> str:
     return f"/api/images/{image_type}/{filename}"
+
+
+def delete_image_file(file_path: str) -> None:
+    """Delete a stored image if it is inside the configured storage directory."""
+    if not file_path:
+        return
+
+    storage_root = Path(STORAGE_PATH).resolve()
+    path = Path(file_path).resolve()
+    try:
+        path.relative_to(storage_root)
+    except ValueError:
+        return
+
+    if path.is_file():
+        path.unlink()

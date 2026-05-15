@@ -1,10 +1,23 @@
 "use client";
 
 import { imageUrl } from "@/lib/api";
-import type { JobDetail } from "@/types";
-import { Download } from "lucide-react";
+import type { HistoryImageTarget, ImageOut, JobDetail } from "@/types";
+import { Brush, Download, Expand, ImageUp, SlidersHorizontal, Trash2 } from "lucide-react";
+import type { ReactNode } from "react";
 
-export function HistoryGrid({ jobs }: { jobs: JobDetail[] }) {
+export function HistoryGrid({
+  jobs,
+  busyJobId,
+  busyImageId,
+  onDelete,
+  onUseImage
+}: {
+  jobs: JobDetail[];
+  busyJobId?: string | null;
+  busyImageId?: string | null;
+  onDelete?: (job: JobDetail) => void;
+  onUseImage?: (target: HistoryImageTarget, image: ImageOut) => void;
+}) {
   if (jobs.length === 0) {
     return <div className="rounded-md border border-line bg-white p-6 text-sm text-muted">No jobs yet.</div>;
   }
@@ -27,15 +40,63 @@ export function HistoryGrid({ jobs }: { jobs: JobDetail[] }) {
                 <div className="truncate text-sm font-semibold">{job.feature}</div>
                 <div className="truncate text-xs text-muted">{new Date(job.created_at).toLocaleString()}</div>
               </div>
-              {output && (
-                <a className="focus-ring rounded-md border border-line p-2 hover:bg-panel" href={imageUrl(output.url)} download={output.filename || "image.png"} title="Download">
-                  <Download className="h-4 w-4" aria-hidden="true" />
-                </a>
-              )}
+              <div className="flex shrink-0 flex-wrap justify-end gap-1">
+                {output && (
+                  <>
+                    <HistoryIconButton title="Use in Edit" disabled={busyImageId === output.id} onClick={() => onUseImage?.("edit", output)}>
+                      <Brush className="h-4 w-4" aria-hidden="true" />
+                    </HistoryIconButton>
+                    <HistoryIconButton title="Use in Upscale" disabled={busyImageId === output.id} onClick={() => onUseImage?.("upscale", output)}>
+                      <ImageUp className="h-4 w-4" aria-hidden="true" />
+                    </HistoryIconButton>
+                    <HistoryIconButton title="Use in Sharpen" disabled={busyImageId === output.id} onClick={() => onUseImage?.("sharpen", output)}>
+                      <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+                    </HistoryIconButton>
+                    <HistoryIconButton title="Use in Expand" disabled={busyImageId === output.id} onClick={() => onUseImage?.("outpaint", output)}>
+                      <Expand className="h-4 w-4" aria-hidden="true" />
+                    </HistoryIconButton>
+                    <a className="focus-ring rounded-md border border-line p-2 hover:bg-panel" href={imageUrl(output.url)} download={output.filename || "image.png"} title="Download" aria-label="Download">
+                      <Download className="h-4 w-4" aria-hidden="true" />
+                    </a>
+                  </>
+                )}
+                {onDelete && (
+                  <HistoryIconButton title="Delete history item" disabled={busyJobId === job.id} danger onClick={() => onDelete(job)}>
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
+                  </HistoryIconButton>
+                )}
+              </div>
             </div>
           </article>
         );
       })}
     </div>
+  );
+}
+
+function HistoryIconButton({
+  title,
+  disabled,
+  danger,
+  onClick,
+  children
+}: {
+  title: string;
+  disabled?: boolean;
+  danger?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      className={`focus-ring rounded-md border border-line p-2 hover:bg-panel disabled:cursor-not-allowed disabled:opacity-50 ${danger ? "text-danger" : ""}`}
+      title={title}
+      aria-label={title}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {children}
+    </button>
   );
 }
