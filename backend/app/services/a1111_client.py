@@ -1,7 +1,10 @@
 import base64
+import logging
 import httpx
 from typing import Any
 from app.config import A1111_BASE_URL
+
+logger = logging.getLogger("photo_ai.a1111")
 
 
 class A1111Client:
@@ -19,54 +22,69 @@ class A1111Client:
 
     async def set_model(self, model_name: str) -> None:
         async with httpx.AsyncClient(timeout=30) as client:
-            await client.post(
+            r = await client.post(
                 f"{self.base_url}/sdapi/v1/options",
                 json={"sd_model_checkpoint": model_name},
             )
+            self._raise_for_status(r, "set_model")
 
     async def txt2img(self, payload: dict[str, Any]) -> list[str]:
         """Returns list of base64-encoded images."""
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             r = await client.post(f"{self.base_url}/sdapi/v1/txt2img", json=payload)
-            r.raise_for_status()
+            self._raise_for_status(r, "txt2img")
             return r.json()["images"]
 
     async def img2img(self, payload: dict[str, Any]) -> list[str]:
         """Returns list of base64-encoded images."""
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             r = await client.post(f"{self.base_url}/sdapi/v1/img2img", json=payload)
-            r.raise_for_status()
+            self._raise_for_status(r, "img2img")
             return r.json()["images"]
 
     async def upscale(self, payload: dict[str, Any]) -> str:
         """Returns base64-encoded image."""
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             r = await client.post(f"{self.base_url}/sdapi/v1/extra-single-image", json=payload)
-            r.raise_for_status()
+            self._raise_for_status(r, "upscale")
             return r.json()["image"]
 
     async def get_models(self) -> list[dict]:
         async with httpx.AsyncClient(timeout=10) as client:
             r = await client.get(f"{self.base_url}/sdapi/v1/sd-models")
-            r.raise_for_status()
+            self._raise_for_status(r, "get_models")
             return r.json()
+
+    @staticmethod
+    def _raise_for_status(response: httpx.Response, operation: str) -> None:
+        try:
+            response.raise_for_status()
+        except Exception:
+            logger.exception(
+                "a1111_request_failed operation=%s status=%s url=%s response=%s",
+                operation,
+                getattr(response, "status_code", None),
+                getattr(response, "url", ""),
+                _short_response_text(response),
+            )
+            raise
 
     async def get_upscalers(self) -> list[dict]:
         async with httpx.AsyncClient(timeout=10) as client:
             r = await client.get(f"{self.base_url}/sdapi/v1/upscalers")
-            r.raise_for_status()
+            self._raise_for_status(r, "get_upscalers")
             return r.json()
 
     async def get_extensions(self) -> list[dict]:
         async with httpx.AsyncClient(timeout=10) as client:
             r = await client.get(f"{self.base_url}/sdapi/v1/extensions")
-            r.raise_for_status()
+            self._raise_for_status(r, "get_extensions")
             return r.json()
 
     async def get_controlnet_models(self) -> list[str]:
         async with httpx.AsyncClient(timeout=10) as client:
             r = await client.get(f"{self.base_url}/controlnet/model_list")
-            r.raise_for_status()
+            self._raise_for_status(r, "get_controlnet_models")
             data = r.json()
             return data.get("model_list", []) if isinstance(data, dict) else []
 
@@ -81,7 +99,7 @@ class A1111Client:
     async def get_progress(self) -> dict[str, Any]:
         async with httpx.AsyncClient(timeout=10) as client:
             r = await client.get(f"{self.base_url}/sdapi/v1/progress?skip_current_image=true")
-            r.raise_for_status()
+            self._raise_for_status(r, "get_progress")
             return r.json()
 
     @staticmethod
@@ -94,3 +112,11 @@ class A1111Client:
 
 
 a1111 = A1111Client()
+
+
+def _short_response_text(response: httpx.Response, limit: int = 1000) -> str:
+    try:
+        text = response.text
+    except Exception:
+        return "<unavailable>"
+    return text[:limit]

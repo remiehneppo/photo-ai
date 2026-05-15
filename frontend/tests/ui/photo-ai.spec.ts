@@ -19,8 +19,17 @@ async function fulfillJson(route: Route, json: unknown, status = 200) {
   });
 }
 
-async function mockApi(page: Page) {
+async function mockApi(
+  page: Page,
+  options: { controlnetModels?: string[]; adetailerAvailable?: boolean; samAvailable?: boolean } = {}
+) {
   const jobs = new Map<string, Record<string, unknown>>();
+  const controlnetModels = options.controlnetModels ?? [
+    "control_v11p_sd15_canny",
+    "control_v11f1p_sd15_depth",
+    "control_v11p_sd15_openpose",
+    "control_v11f1e_sd15_tile"
+  ];
 
   await page.route("http://localhost:8000/api/images/**", async (route) => {
     await route.fulfill({
@@ -40,6 +49,11 @@ async function mockApi(page: Page) {
     }
 
     if (url.pathname === "/auth/login" && method === "POST") {
+      const form = new URLSearchParams(route.request().postData() ?? "");
+      if (form.get("username") === "creator" && form.get("password") !== " password123 ") {
+        await fulfillJson(route, { detail: "Password was changed before submit" }, 401);
+        return;
+      }
       await fulfillJson(route, { access_token: "mock-token", token_type: "bearer" });
       return;
     }
@@ -61,9 +75,9 @@ async function mockApi(page: Page) {
         upscalers: ["R-ESRGAN 4x+"],
         extensions: ["sd-webui-controlnet", "adetailer"],
         controlnet_available: true,
-        controlnet_models: ["control_v11p_sd15_canny"],
-        adetailer_available: true,
-        sam_available: false
+        controlnet_models: controlnetModels,
+        adetailer_available: options.adetailerAvailable ?? true,
+        sam_available: options.samAvailable ?? false
       });
       return;
     }
@@ -142,8 +156,8 @@ async function signIn(page: Page) {
   await mockApi(page);
   await page.goto("/login");
   await page.waitForLoadState("networkidle");
-  await page.getByLabel("Email").fill("creator@example.com");
-  await page.getByLabel("Password").fill("password123");
+  await page.getByLabel("Email or username").fill("creator");
+  await page.getByLabel("Password").fill(" password123 ");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.getByRole("heading", { name: "Photo AI" })).toBeVisible();
@@ -169,8 +183,8 @@ test("login and register flows expose the expected entry points", async ({ page 
   await expect(page.getByRole("heading", { name: "Create Account" })).toBeVisible();
   await page.waitForLoadState("networkidle");
 
-  await page.getByLabel("Email").fill("creator@example.com");
-  await page.getByLabel("Username").fill("creator");
+  await page.getByLabel("Email").fill(" Creator@Example.COM ");
+  await page.getByLabel("Username").fill(" creator ");
   await page.getByLabel("Password").fill("password123");
   await page.getByRole("button", { name: "Create account" }).click();
 
@@ -194,6 +208,24 @@ test("generate tab lets a creator choose style, submit prompt, and see result", 
   await expect(page.getByText("job-txt2img")).toBeVisible();
   await expect(page.getByText("done")).toBeVisible();
   await expect(page.getByText("Output")).toBeVisible();
+});
+
+test("reference controls disable modes whose ControlNet model is missing", async ({ page }) => {
+  await mockApi(page, {
+    controlnetModels: ["control_v11p_sd15_canny", "control_v11f1p_sd15_depth", "control_v11f1e_sd15_tile"]
+  });
+  await page.goto("/login");
+  await page.waitForLoadState("networkidle");
+  await page.getByLabel("Email or username").fill("creator");
+  await page.getByLabel("Password").fill(" password123 ");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+
+  await uploadImage(page);
+  await expect(page.getByRole("button", { name: "Edges" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Depth" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Pose" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Product" })).toBeEnabled();
 });
 
 test("upload workflows expose edit, upscale, sharpen, and expand controls without A1111", async ({ page }) => {

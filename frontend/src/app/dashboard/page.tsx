@@ -354,12 +354,13 @@ function ReferenceControl({
 }) {
   const controlnetModels = capabilities?.controlnet_models ?? [];
   const available = Boolean(capabilities?.controlnet_available && controlnetModels.length > 0);
-  const modes: Array<{ value: ControlMode; label: string }> = [
-    { value: "edges", label: "Edges" },
-    { value: "depth", label: "Depth" },
-    { value: "pose", label: "Pose" },
-    { value: "product_layout", label: "Product" }
+  const modes: Array<{ value: ControlMode; label: string; keyword: string }> = [
+    { value: "edges", label: "Edges", keyword: "canny" },
+    { value: "depth", label: "Depth", keyword: "depth" },
+    { value: "pose", label: "Pose", keyword: "openpose" },
+    { value: "product_layout", label: "Product", keyword: "canny" }
   ];
+  const hasModeModel = (keyword: string) => controlnetModels.some((model) => model.toLowerCase().includes(keyword));
 
   return (
     <div className="grid gap-3 rounded-md border border-line bg-white p-3">
@@ -378,18 +379,23 @@ function ReferenceControl({
         <>
           <ImageUpload file={file} onChange={onFile} />
           <div className="grid gap-2 sm:grid-cols-4">
-            {modes.map((item) => (
-              <button
-                key={item.value}
-                type="button"
-                onClick={() => onMode(item.value)}
-                className={`focus-ring h-10 rounded-md border px-3 text-sm font-semibold ${
-                  mode === item.value ? "border-accent bg-accent text-white" : "border-line bg-white text-ink hover:bg-panel"
-                }`}
-              >
-                {item.label}
-              </button>
-            ))}
+            {modes.map((item) => {
+              const modeAvailable = hasModeModel(item.keyword);
+              return (
+                <button
+                  key={item.value}
+                  type="button"
+                  disabled={!modeAvailable}
+                  onClick={() => onMode(item.value)}
+                  className={`focus-ring h-10 rounded-md border px-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-45 ${
+                    mode === item.value ? "border-accent bg-accent text-white" : "border-line bg-white text-ink hover:bg-panel"
+                  }`}
+                  title={modeAvailable ? item.label : `${item.label} ControlNet model is not available`}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
           </div>
           <label className="grid gap-2 text-sm font-semibold">
             Strength

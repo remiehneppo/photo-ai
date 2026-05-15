@@ -9,7 +9,7 @@ import { FormEvent, useState } from "react";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -19,7 +19,7 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      await login(email, password);
+      await login(identifier, password);
       router.push("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
@@ -42,12 +42,16 @@ export default function LoginPage() {
         </div>
 
         <label className="mb-4 block">
-          <span className="mb-1 block text-sm font-semibold">Email</span>
+          <span className="mb-1 block text-sm font-semibold">Email or username</span>
           <input
             className="focus-ring h-11 w-full rounded-md border border-line bg-white px-3"
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
+            type="text"
+            inputMode="email"
+            autoCapitalize="none"
+            spellCheck={false}
+            value={identifier}
+            onChange={(event) => setIdentifier(event.target.value)}
+            onBlur={() => setIdentifier(identifier.includes("@") ? identifier.trim().toLowerCase() : identifier.trim())}
             required
           />
         </label>

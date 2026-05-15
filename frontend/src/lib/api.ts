@@ -7,8 +7,12 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"
 
 async function readError(response: Response) {
   try {
-    const data = (await response.json()) as { detail?: string };
-    return data.detail || response.statusText;
+    const data = (await response.json()) as { detail?: string | Array<{ msg?: string }> };
+    if (typeof data.detail === "string") return data.detail;
+    if (Array.isArray(data.detail)) {
+      return data.detail.map((item) => item.msg).filter(Boolean).join(", ") || response.statusText;
+    }
+    return response.statusText;
   } catch {
     return response.statusText;
   }
@@ -17,6 +21,7 @@ async function readError(response: Response) {
 async function request<T>(path: string, init: RequestInit = {}) {
   const token = getToken();
   const headers = new Headers(init.headers);
+  const method = init.method || "GET";
   if (token) headers.set("Authorization", `Bearer ${token}`);
   if (!(init.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
@@ -29,8 +34,17 @@ async function request<T>(path: string, init: RequestInit = {}) {
   });
 
   if (response.status === 401) clearToken();
-  if (!response.ok) throw new Error(await readError(response));
+  if (!response.ok) {
+    const message = await readError(response);
+    logApiError({ path, method, status: response.status, requestId: response.headers.get("x-request-id"), message });
+    throw new Error(message);
+  }
   return (await response.json()) as T;
+}
+
+function logApiError(error: { path: string; method: string; status: number; requestId: string | null; message: string }) {
+  if (typeof window === "undefined") return;
+  console.error("[photo-ai] API request failed", error);
 }
 
 export function imageUrl(url: string) {
@@ -40,15 +54,21 @@ export function imageUrl(url: string) {
 }
 
 export async function register(payload: { email: string; username: string; password: string }) {
+  const normalized = {
+    email: payload.email.trim().toLowerCase(),
+    username: payload.username.trim(),
+    password: payload.password
+  };
   return request<User>("/auth/register", {
     method: "POST",
-    body: JSON.stringify(payload)
+    body: JSON.stringify(normalized)
   });
 }
 
-export async function login(email: string, password: string) {
+export async function login(identifier: string, password: string) {
   const form = new URLSearchParams();
-  form.set("username", email);
+  const normalizedIdentifier = identifier.includes("@") ? identifier.trim().toLowerCase() : identifier.trim();
+  form.set("username", normalizedIdentifier);
   form.set("password", password);
   const data = await request<TokenResponse>("/auth/login", {
     method: "POST",

@@ -18,7 +18,7 @@ def test_build_adetailer_scripts_adds_face_and_hand_models():
     assert args[0] is True
     assert args[1] is False
     assert args[2]["ad_model"] == "face_yolov8s.pt"
-    assert args[3]["ad_model"] == "hand_yolov8n.pt"
+    assert args[3]["ad_model"] == "hand_yolov8s.pt"
 
 
 def test_build_adetailer_scripts_returns_empty_when_disabled():

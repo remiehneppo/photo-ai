@@ -1,5 +1,7 @@
 import asyncio
 
+import pytest
+
 from app.services.controlnet_service import build_controlnet_scripts, merge_alwayson_scripts
 
 
@@ -16,6 +18,11 @@ def test_build_controlnet_scripts_selects_model_by_mode():
     assert unit["module"] == "canny"
     assert unit["model"] == "control_v11p_sd15_canny"
     assert unit["weight"] == 0.8
+
+
+def test_build_controlnet_scripts_reports_missing_mode_model():
+    with pytest.raises(RuntimeError, match="Missing ControlNet model for mode: pose"):
+        asyncio.run(build_controlnet_scripts(FakeA1111(), "encoded-reference", "pose", 0.8))
 
 
 def test_merge_alwayson_scripts_combines_extensions():

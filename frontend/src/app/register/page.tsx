@@ -45,12 +45,22 @@ export default function RegisterPage() {
 
         <label className="mb-4 block">
           <span className="mb-1 block text-sm font-semibold">Email</span>
-          <input className="focus-ring h-11 w-full rounded-md border border-line bg-white px-3" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+          <input
+            className="focus-ring h-11 w-full rounded-md border border-line bg-white px-3"
+            type="text"
+            inputMode="email"
+            autoCapitalize="none"
+            spellCheck={false}
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            onBlur={() => setEmail(email.trim().toLowerCase())}
+            required
+          />
         </label>
 
         <label className="mb-4 block">
           <span className="mb-1 block text-sm font-semibold">Username</span>
-          <input className="focus-ring h-11 w-full rounded-md border border-line bg-white px-3" value={username} onChange={(event) => setUsername(event.target.value)} required />
+          <input className="focus-ring h-11 w-full rounded-md border border-line bg-white px-3" value={username} onChange={(event) => setUsername(event.target.value)} onBlur={() => setUsername(username.trim())} required />
         </label>
 
         <label className="mb-4 block">

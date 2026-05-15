@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import User
@@ -29,15 +30,22 @@ class UserResponse(BaseModel):
 
 @router.post("/register", response_model=UserResponse, status_code=201)
 def register(req: RegisterRequest, db: Session = Depends(get_db)):
-    if db.query(User).filter(User.email == req.email).first():
+    email = str(req.email).strip().lower()
+    username = req.username.strip()
+    password = req.password
+    if not username:
+        raise HTTPException(status_code=400, detail="Username is required")
+    if len(password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    if db.query(User).filter(func.lower(User.email) == email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
-    if db.query(User).filter(User.username == req.username).first():
+    if db.query(User).filter(User.username == username).first():
         raise HTTPException(status_code=400, detail="Username already taken")
     user = User(
         id=str(uuid.uuid4()),
-        email=req.email,
-        username=req.username,
-        hashed_password=hash_password(req.password),
+        email=email,
+        username=username,
+        hashed_password=hash_password(password),
     )
     db.add(user)
     db.commit()
@@ -47,8 +55,13 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=TokenResponse)
 def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == form.username).first()
-    if not user or not verify_password(form.password, user.hashed_password):
+    identifier = form.username.strip()
+    normalized_identifier = identifier.lower()
+    password = form.password
+    user = db.query(User).filter(
+        (func.lower(User.email) == normalized_identifier) | (User.username == identifier)
+    ).first()
+    if not user or not verify_password(password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     token = create_access_token({"sub": user.id})
     return TokenResponse(access_token=token)

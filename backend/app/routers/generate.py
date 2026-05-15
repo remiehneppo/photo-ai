@@ -8,6 +8,7 @@ from app.models.image import Image
 from app.services.auth_service import get_current_user
 from app.services.adetailer_service import build_adetailer_scripts, has_adetailer
 from app.services.controlnet_service import build_controlnet_scripts, merge_alwayson_scripts
+from app.services.model_service import add_model_override, resolve_checkpoint
 from app.services.preset_service import get_preset, merge_prompt, available_styles
 from app.services.a1111_client import a1111
 from app.services.storage_service import save_output, get_image_url
@@ -65,6 +66,7 @@ async def generate(
 
     async def task():
         from app.database import SessionLocal
+        checkpoint = await resolve_checkpoint(a1111, preset["model"])
         positive = merge_prompt(preset["base_positive"], req.prompt)
         payload = {
             "prompt": positive,
@@ -78,6 +80,7 @@ async def generate(
         adetailer = build_adetailer_scripts(req.fix_face, req.fix_hands)
         if adetailer:
             payload["alwayson_scripts"] = adetailer
+        payload = add_model_override(payload, checkpoint)
         images = await a1111.txt2img(payload)
         img_bytes = a1111.decode_image(images[0])
         file_path, filename = await save_output(img_bytes)
@@ -150,6 +153,7 @@ async def generate_with_reference(
 
     async def task():
         from app.database import SessionLocal
+        checkpoint = await resolve_checkpoint(a1111, preset["model"])
         positive = merge_prompt(preset["base_positive"], prompt)
         payload = {
             "prompt": positive,
@@ -164,6 +168,7 @@ async def generate_with_reference(
         alwayson_scripts = merge_alwayson_scripts(controlnet, adetailer)
         if alwayson_scripts:
             payload["alwayson_scripts"] = alwayson_scripts
+        payload = add_model_override(payload, checkpoint)
         images = await a1111.txt2img(payload)
         img_bytes = a1111.decode_image(images[0])
         file_path, filename = await save_output(img_bytes)

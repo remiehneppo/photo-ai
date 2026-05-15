@@ -1,9 +1,12 @@
 import asyncio
+import logging
 from datetime import datetime
 from typing import Awaitable, Callable, Any
 from sqlalchemy.orm import Session
 from app.models.job import Job
 from app.database import SessionLocal
+
+logger = logging.getLogger("photo_ai.jobs")
 
 ProgressProvider = Callable[[], Awaitable[dict[str, Any]]]
 
@@ -39,6 +42,7 @@ async def run_job(
         job.completed_at = datetime.utcnow()
         db.commit()
     except Exception as e:
+        logger.exception("job_failed job_id=%s error=%s", job_id, e)
         job = db.query(Job).filter(Job.id == job_id).first()
         if job:
             job.status = "failed"
@@ -61,7 +65,8 @@ async def _monitor_progress(job_id: str, progress_provider: ProgressProvider) ->
         try:
             raw = await progress_provider()
             update_job_progress(job_id, **_parse_a1111_progress(raw))
-        except Exception:
+        except Exception as exc:
+            logger.warning("job_progress_poll_failed job_id=%s error=%s", job_id, exc)
             pass
         await asyncio.sleep(1.0)
 

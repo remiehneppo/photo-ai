@@ -1,4 +1,7 @@
 import asyncio
+from io import BytesIO
+
+from PIL import Image as PILImage
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -36,6 +39,8 @@ class FakeA1111:
         return [
             {"model_name": "realismIllustriousBy_v55FP16"},
             {"model_name": "anything-v5"},
+            {"model_name": "Juggernaut-XL_v9_RunDiffusionPhoto_v2"},
+            {"model_name": "v1-5-pruned-emaonly"},
         ]
 
     async def get_upscalers(self):
@@ -75,6 +80,22 @@ class PngUpload:
             b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\xff\xff?"
             b"\x00\x05\xfe\x02\xfeA\xde\x83\xb1\x00\x00\x00\x00IEND\xaeB`\x82"
         )
+
+
+def png_bytes(width=17, height=11):
+    image = PILImage.new("RGB", (width, height), (10, 20, 30))
+    buf = BytesIO()
+    image.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+class SizedPngUpload:
+    def __init__(self, width=17, height=11):
+        self.width = width
+        self.height = height
+
+    async def read(self):
+        return png_bytes(self.width, self.height)
 
 
 class CapturedTasks:
@@ -152,6 +173,29 @@ def test_generate_route_creates_job_and_output_image(monkeypatch):
     assert db.query(Image).filter(Image.job_id == response.job_id).first().filename == "output.png"
     assert fake.payloads[0][0] == "txt2img"
     assert "cinematic portrait" in fake.payloads[0][1]["prompt"]
+    assert fake.payloads[0][1]["override_settings"]["sd_model_checkpoint"] == "realismIllustriousBy_v55FP16"
+
+
+def test_generate_route_uses_style_checkpoint_from_config(monkeypatch):
+    factory = session_factory()
+    db = factory()
+    user = seed_user(db)
+    fake = FakeA1111()
+    patch_common(monkeypatch, generate, factory, fake)
+    tasks = CapturedTasks()
+
+    response = asyncio.run(call_and_run_tasks(
+        generate.generate(
+            req=generate.GenerateRequest(prompt="anime portrait", style="anime"),
+            background_tasks=tasks,
+            db=db,
+            current_user=user,
+        ),
+        tasks,
+    ))
+
+    assert response.status == "pending"
+    assert fake.payloads[0][1]["override_settings"]["sd_model_checkpoint"] == "anything-v5"
 
 
 def test_generate_route_can_enable_adetailer(monkeypatch):
@@ -175,7 +219,7 @@ def test_generate_route_can_enable_adetailer(monkeypatch):
     assert response.status == "pending"
     adetailer_args = fake.payloads[0][1]["alwayson_scripts"]["ADetailer"]["args"]
     assert adetailer_args[2]["ad_model"] == "face_yolov8s.pt"
-    assert adetailer_args[3]["ad_model"] == "hand_yolov8n.pt"
+    assert adetailer_args[3]["ad_model"] == "hand_yolov8s.pt"
 
 
 def test_generate_with_reference_adds_controlnet_payload(monkeypatch):
@@ -223,7 +267,7 @@ def test_edit_route_saves_input_and_output(monkeypatch):
             background_tasks=tasks,
             prompt="make it dramatic",
             style="realistic",
-            image=Upload(),
+            image=SizedPngUpload(17, 11),
             db=db,
             current_user=user,
         ),
@@ -234,6 +278,16 @@ def test_edit_route_saves_input_and_output(monkeypatch):
     assert {image.type for image in images} == {"input", "output"}
     assert fake.payloads[0][0] == "img2img"
     assert fake.payloads[0][1]["init_images"] == ["encoded-input"]
+    assert fake.payloads[0][1]["width"] == 17
+    assert fake.payloads[0][1]["height"] == 11
+    assert fake.payloads[0][1]["override_settings"]["sd_model_checkpoint"] == "realismIllustriousBy_v55FP16"
+
+
+def test_edit_resizes_output_to_match_source_size():
+    resized_bytes = edit.ensure_image_size(png_bytes(4, 3), (17, 11))
+
+    with PILImage.open(BytesIO(resized_bytes)) as image:
+        assert image.size == (17, 11)
 
 
 def test_edit_route_can_add_controlnet_payload(monkeypatch):
@@ -253,7 +307,7 @@ def test_edit_route_can_add_controlnet_payload(monkeypatch):
             fix_hands=False,
             control_mode="edges",
             control_weight=0.9,
-            image=Upload(),
+            image=SizedPngUpload(13, 9),
             control_image=Upload(),
             db=db,
             current_user=user,
@@ -323,7 +377,7 @@ def test_outpaint_route_builds_mask_payload(monkeypatch):
     user = seed_user(db)
     fake = FakeA1111()
     patch_common(monkeypatch, outpaint, factory, fake)
-    monkeypatch.setattr(outpaint, "expand_canvas", lambda _bytes, _direction, _px: (b"expanded", b"mask"))
+    monkeypatch.setattr(outpaint, "expand_canvas", lambda _bytes, _direction, _px: (png_bytes(17, 11), png_bytes(17, 11)))
     tasks = CapturedTasks()
 
     response = asyncio.run(call_and_run_tasks(
@@ -342,6 +396,9 @@ def test_outpaint_route_builds_mask_payload(monkeypatch):
     assert db.query(Job).filter(Job.id == response.job_id).first().feature == "outpaint"
     assert fake.payloads[0][0] == "img2img"
     assert fake.payloads[0][1]["mask"] == "encoded-input"
+    assert fake.payloads[0][1]["width"] > 0
+    assert fake.payloads[0][1]["height"] > 0
+    assert fake.payloads[0][1]["override_settings"]["sd_model_checkpoint"] == "realismIllustriousBy_v55FP16"
 
 
 def test_jobs_route_returns_current_user_history():
@@ -371,7 +428,7 @@ def test_capabilities_route_reports_a1111_features(monkeypatch):
     result = asyncio.run(capabilities.get_capabilities())
 
     assert result.a1111_connected is True
-    assert result.checkpoints == ["realismIllustriousBy_v55FP16", "anything-v5"]
+    assert result.checkpoints == ["realismIllustriousBy_v55FP16", "anything-v5", "Juggernaut-XL_v9_RunDiffusionPhoto_v2", "v1-5-pruned-emaonly"]
     assert result.upscalers == ["R-ESRGAN 4x+", "4x-UltraSharp"]
     assert result.controlnet_available is True
     assert result.controlnet_models == ["control_v11p_sd15_canny"]

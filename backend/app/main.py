@@ -1,4 +1,9 @@
 import os
+import logging
+import time
+import uuid
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -7,10 +12,48 @@ from app.models import User, Job, Image
 from app.database import Base
 from app.routers import auth, capabilities, generate, edit, upscale, sharpen, outpaint, jobs
 from app.config import STORAGE_PATH
+from app.logging_config import configure_logging
+
+configure_logging()
+logger = logging.getLogger("photo_ai.api")
 
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Photo AI API", version="1.0.0")
+
+
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
+        start = time.perf_counter()
+        try:
+            response = await call_next(request)
+        except Exception:
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            logger.exception(
+                "request_failed request_id=%s method=%s path=%s duration_ms=%s",
+                request_id,
+                request.method,
+                request.url.path,
+                duration_ms,
+            )
+            raise
+
+        duration_ms = int((time.perf_counter() - start) * 1000)
+        response.headers["x-request-id"] = request_id
+        log = logger.warning if response.status_code >= 400 else logger.info
+        log(
+            "request_done request_id=%s method=%s path=%s status=%s duration_ms=%s",
+            request_id,
+            request.method,
+            request.url.path,
+            response.status_code,
+            duration_ms,
+        )
+        return response
+
+
+app.add_middleware(RequestLoggingMiddleware)
 
 app.add_middleware(
     CORSMiddleware,

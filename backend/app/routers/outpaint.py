@@ -9,6 +9,7 @@ from app.models.job import Job
 from app.models.image import Image
 from app.services.auth_service import get_current_user
 from app.services.adetailer_service import build_adetailer_scripts, has_adetailer
+from app.services.model_service import add_model_override, resolve_checkpoint
 from app.services.preset_service import get_preset, merge_prompt
 from app.services.a1111_client import a1111
 from app.services.storage_service import save_upload, save_output
@@ -117,7 +118,10 @@ async def outpaint_image(
     b64_mask = a1111.encode_image(mask_bytes)
 
     async def task():
+        checkpoint = await resolve_checkpoint(a1111, preset["model"])
         positive = merge_prompt(preset["base_positive"], prompt)
+        with PILImage.open(io.BytesIO(expanded_bytes)) as expanded_image:
+            expanded_width, expanded_height = expanded_image.size
         payload = {
             "init_images": [b64_expanded],
             "mask": b64_mask,
@@ -130,10 +134,13 @@ async def outpaint_image(
             "steps": preset["steps"],
             "cfg_scale": preset["cfg_scale"],
             "sampler_name": preset["sampler_name"],
+            "width": expanded_width,
+            "height": expanded_height,
         }
         adetailer = build_adetailer_scripts(fix_face_enabled, fix_hands_enabled)
         if adetailer:
             payload["alwayson_scripts"] = adetailer
+        payload = add_model_override(payload, checkpoint)
         images = await a1111.img2img(payload)
         img_bytes_out = a1111.decode_image(images[0])
         out_path, out_filename = await save_output(img_bytes_out)

@@ -1,5 +1,7 @@
 import uuid
+from io import BytesIO
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, UploadFile, File, Form
+from PIL import Image as PILImage, UnidentifiedImageError
 from sqlalchemy.orm import Session
 from app.database import get_db, SessionLocal
 from app.models.user import User
@@ -8,6 +10,7 @@ from app.models.image import Image
 from app.services.auth_service import get_current_user
 from app.services.adetailer_service import build_adetailer_scripts, has_adetailer
 from app.services.controlnet_service import build_controlnet_scripts, merge_alwayson_scripts
+from app.services.model_service import add_model_override, resolve_checkpoint
 from app.services.preset_service import get_preset, merge_prompt
 from app.services.a1111_client import a1111
 from app.services.storage_service import save_upload, save_output
@@ -17,6 +20,27 @@ from pydantic import BaseModel
 router = APIRouter(prefix="/api/edit", tags=["edit"])
 
 VALID_STYLES = ["realistic", "anime", "advertisement", "portrait", "artistic"]
+
+
+def get_image_size(image_bytes: bytes) -> tuple[int, int]:
+    try:
+        with PILImage.open(BytesIO(image_bytes)) as img:
+            return img.size
+    except UnidentifiedImageError as exc:
+        raise HTTPException(status_code=400, detail="Uploaded image is not a valid image file") from exc
+
+
+def ensure_image_size(image_bytes: bytes, target_size: tuple[int, int]) -> bytes:
+    try:
+        with PILImage.open(BytesIO(image_bytes)) as img:
+            if img.size == target_size:
+                return image_bytes
+            resized = img.resize(target_size, PILImage.Resampling.LANCZOS)
+            output = BytesIO()
+            resized.save(output, format="PNG")
+            return output.getvalue()
+    except UnidentifiedImageError:
+        return image_bytes
 
 
 class JobResponse(BaseModel):
@@ -46,6 +70,7 @@ async def edit_image(
         raise HTTPException(status_code=400, detail="ADetailer is not available in A1111")
 
     image_bytes = await image.read()
+    source_width, source_height = get_image_size(image_bytes)
     file_path, filename = await save_upload(image_bytes)
     controlnet = {}
     if control_image is not None and hasattr(control_image, "read"):
@@ -78,6 +103,7 @@ async def edit_image(
     b64_input = a1111.encode_image(image_bytes)
 
     async def task():
+        checkpoint = await resolve_checkpoint(a1111, preset["model"])
         positive = merge_prompt(preset["base_positive"], prompt)
         payload = {
             "init_images": [b64_input],
@@ -87,13 +113,16 @@ async def edit_image(
             "steps": preset["steps"],
             "cfg_scale": preset["cfg_scale"],
             "sampler_name": preset["sampler_name"],
+            "width": source_width,
+            "height": source_height,
         }
         adetailer = build_adetailer_scripts(fix_face_enabled, fix_hands_enabled)
         alwayson_scripts = merge_alwayson_scripts(controlnet, adetailer)
         if alwayson_scripts:
             payload["alwayson_scripts"] = alwayson_scripts
+        payload = add_model_override(payload, checkpoint)
         images = await a1111.img2img(payload)
-        img_bytes = a1111.decode_image(images[0])
+        img_bytes = ensure_image_size(a1111.decode_image(images[0]), (source_width, source_height))
         out_path, out_filename = await save_output(img_bytes)
         db2 = SessionLocal()
         try:

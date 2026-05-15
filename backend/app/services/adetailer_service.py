@@ -2,7 +2,7 @@ from typing import Any
 
 
 FACE_MODEL = "face_yolov8s.pt"
-HAND_MODEL = "hand_yolov8n.pt"
+HAND_MODEL = "hand_yolov8s.pt"
 
 
 def build_adetailer_scripts(fix_face: bool = False, fix_hands: bool = False) -> dict[str, Any]:
