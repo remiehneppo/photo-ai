@@ -3,7 +3,18 @@
 import { clearToken, getToken, setToken } from "@/lib/auth";
 import type { Capabilities, ControlMode, Direction, JobDetail, JobResponse, Style, TokenResponse, User } from "@/types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const API_PORT = process.env.NEXT_PUBLIC_API_PORT || "8000";
+
+function getApiBase() {
+  const explicitBase = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
+  if (explicitBase) return explicitBase;
+  if (typeof window !== "undefined") {
+    return `${window.location.protocol}//${window.location.hostname}:${API_PORT}`;
+  }
+  return `http://localhost:${API_PORT}`;
+}
+
+const API_BASE = getApiBase();
 
 async function readError(response: Response) {
   try {

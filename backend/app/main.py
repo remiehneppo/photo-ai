@@ -55,14 +55,34 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(RequestLoggingMiddleware)
 
+
+class NoStoreImagesMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/api/images/"):
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        return response
+
+
+app.add_middleware(NoStoreImagesMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "http://photo-ai.suprenam.id.vn",
+        "https://photo-ai.suprenam.id.vn",
+        "http://photo-be.suprenam.id.vn",
+        "https://photo-be.suprenam.id.vn",
         "http://localhost:3000",
         "http://localhost:3001",
+        "http://localhost:3002",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:3001",
+        "http://127.0.0.1:3002",
     ],
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1):\d+",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

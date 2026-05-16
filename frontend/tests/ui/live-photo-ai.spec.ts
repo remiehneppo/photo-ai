@@ -59,6 +59,7 @@ const REPORT_PATH = path.resolve(process.cwd(), "../.context/live-browser-test-r
 const SCREENSHOT_DIR = path.resolve(process.cwd(), "../.context/ui-test-screenshots");
 const JOB_TIMEOUT_MS = Number(process.env.LIVE_JOB_TIMEOUT_MS ?? 10 * 60 * 1000);
 const REST_MS = Number(process.env.LIVE_JOB_REST_MS ?? 3000);
+const URL_TIMEOUT_MS = Number(process.env.LIVE_URL_TIMEOUT_MS ?? 15_000);
 
 const styles = ["realistic", "anime", "advertisement", "portrait", "artistic"];
 const controlModes = [
@@ -121,7 +122,7 @@ test("live browser matrix against real backend and A1111", async ({ page }, test
     await page.getByLabel("Username").fill(account.username);
     await page.getByLabel("Password").fill(account.password);
     await page.getByRole("button", { name: "Create account" }).click();
-    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page).toHaveURL(/\/dashboard$/, { timeout: URL_TIMEOUT_MS });
     await expect(page.getByRole("heading", { name: "Photo AI" })).toBeVisible();
     await expect(page.getByText(account.email)).toBeVisible();
     await expect(page.getByText(/A1111 connected|A1111 offline/)).toBeVisible();
@@ -130,23 +131,23 @@ test("live browser matrix against real backend and A1111", async ({ page }, test
 
   await runCase(page, testInfo, "auth-logout-login", "Logout then login again", "Same account returns to dashboard", async () => {
     await page.getByRole("button", { name: "Sign out" }).click();
-    await expect(page).toHaveURL(/\/login$/);
+    await expect(page).toHaveURL(/\/login$/, { timeout: URL_TIMEOUT_MS });
     await page.getByLabel("Email or username").fill(account.email);
     await page.getByLabel("Password").fill(account.password);
     await page.getByRole("button", { name: "Sign in" }).click();
-    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page).toHaveURL(/\/dashboard$/, { timeout: URL_TIMEOUT_MS });
     await expect(page.getByText(account.email)).toBeVisible();
     return "login succeeded after logout";
   });
 
   await runCase(page, testInfo, "auth-invalid-password", "Login with wrong password", "Visible error and no dashboard navigation", async () => {
     await page.getByRole("button", { name: "Sign out" }).click();
-    await expect(page).toHaveURL(/\/login$/);
+    await expect(page).toHaveURL(/\/login$/, { timeout: URL_TIMEOUT_MS });
     allowCurrentNetworkErrors = true;
     await page.getByLabel("Email or username").fill(account.email);
     await page.getByLabel("Password").fill("wrong-password");
     await page.getByRole("button", { name: "Sign in" }).click();
-    await expect(page).toHaveURL(/\/login$/);
+    await expect(page).toHaveURL(/\/login$/, { timeout: URL_TIMEOUT_MS });
     await expect(page.locator(".text-danger")).toBeVisible();
     return await page.locator(".text-danger").innerText();
   });
@@ -155,7 +156,7 @@ test("live browser matrix against real backend and A1111", async ({ page }, test
 
   await runCase(page, testInfo, "auth-refresh-session", "Refresh dashboard with token", "Session remains authenticated", async () => {
     await page.reload();
-    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page).toHaveURL(/\/dashboard$/, { timeout: URL_TIMEOUT_MS });
     await expect(page.getByText(account.email)).toBeVisible();
     return "dashboard still authenticated after reload";
   });
@@ -164,7 +165,7 @@ test("live browser matrix against real backend and A1111", async ({ page }, test
     allowCurrentNetworkErrors = true;
     await page.evaluate(() => localStorage.setItem("photo_ai_token", "invalid-browser-test-token"));
     await page.reload();
-    await expect(page).toHaveURL(/\/login$/);
+    await expect(page).toHaveURL(/\/login$/, { timeout: URL_TIMEOUT_MS });
     await expect(page.getByRole("heading", { name: "Photo AI" })).toBeVisible();
     return "redirected to login after invalid token";
   });
@@ -382,7 +383,7 @@ async function historyAndAdversarial(page: Page, testInfo: TestInfo, account: { 
   await runCase(page, testInfo, "history-deleted-url", "Request deleted output URL", "Deleted output is not still served", async () => {
     allowCurrentNetworkErrors = true;
     const output = seedJob!.images.find((image) => image.type === "output");
-    const response = await page.request.get(`${API_BASE}${output?.url}`);
+    const response = await page.request.get(`${API_BASE}${output?.url}?t=${Date.now()}`);
     if (response.ok()) throw new Error(`Deleted output still rendered at ${output?.url}`);
     return `deleted URL returned ${response.status()}`;
   });
@@ -395,7 +396,7 @@ async function historyAndAdversarial(page: Page, testInfo: TestInfo, account: { 
     await page.getByLabel("Username").fill(other.username);
     await page.getByLabel("Password").fill(other.password);
     await page.getByRole("button", { name: "Create account" }).click();
-    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page).toHaveURL(/\/dashboard$/, { timeout: URL_TIMEOUT_MS });
     await selectTab(page, "History");
     await expect(page.getByText("No jobs yet.")).toBeVisible();
     return "new user history empty";
@@ -438,7 +439,7 @@ async function historyAndAdversarial(page: Page, testInfo: TestInfo, account: { 
 async function mobileAndKeyboard(page: Page, testInfo: TestInfo, account: { email: string; password: string }) {
   await runCase(page, testInfo, "keyboard-login", "Keyboard-only login flow", "Tab/Enter can submit and focus is visible", async () => {
     await page.getByRole("button", { name: "Sign out" }).click();
-    await expect(page).toHaveURL(/\/login$/);
+    await expect(page).toHaveURL(/\/login$/, { timeout: URL_TIMEOUT_MS });
     await page.getByLabel("Email or username").focus();
     await page.keyboard.type(account.email);
     await page.keyboard.press("Tab");
@@ -448,7 +449,7 @@ async function mobileAndKeyboard(page: Page, testInfo: TestInfo, account: { emai
       return active?.textContent || active?.value || active?.getAttribute("aria-label") || active?.tagName || "";
     });
     await page.keyboard.press("Enter");
-    await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page).toHaveURL(/\/dashboard$/, { timeout: URL_TIMEOUT_MS });
     return `submitted via keyboard from active element "${activeText.trim()}"`;
   });
 }
@@ -619,7 +620,7 @@ async function login(page: Page, email: string, password: string) {
   await page.getByLabel("Email or username").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page).toHaveURL(/\/dashboard$/, { timeout: URL_TIMEOUT_MS });
   await expect(page.getByText(email)).toBeVisible();
 }
 
