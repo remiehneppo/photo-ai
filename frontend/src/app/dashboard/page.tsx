@@ -18,7 +18,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 type Tab = "generate" | "edit" | "upscale" | "sharpen" | "outpaint" | "history";
 type HistoryImageSeed = { target: HistoryImageTarget; file: File };
 
-const fallbackStyles = ["realistic", "anime", "advertisement", "portrait", "artistic"].map((style) => ({
+const fallbackStyles = ["realistic", "anime", "advertisement", "portrait", "artistic", "natural"].map((style) => ({
   value: style,
   label: style
     .split("_")

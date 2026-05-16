@@ -7,7 +7,8 @@ const fallbackStyles: Array<{ value: Style; label: string }> = [
   { value: "anime", label: "Anime" },
   { value: "advertisement", label: "Advertisement" },
   { value: "portrait", label: "Portrait" },
-  { value: "artistic", label: "Artistic" }
+  { value: "artistic", label: "Artistic" },
+  { value: "natural", label: "Natural" }
 ];
 
 export function StyleSelector({ value, onChange, styles = fallbackStyles }: { value: Style; onChange: (style: Style) => void; styles?: Array<{ value: Style; label: string }> }) {

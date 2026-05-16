@@ -50,6 +50,16 @@ presets:
       base_positive: "masterpiece, best quality, highly detailed, artstation, concept art, smooth, sharp focus, illustration"
       base_negative: "nsfw, lowres, bad anatomy, bad hands, text, watermark, blurry, ugly, duplicate"
 
+    natural:
+      model: chilloutmix_NiPrunedFp32Fix
+      steps: 30
+      cfg_scale: 7
+      sampler_name: DPM++ 2M Karras
+      width: 512
+      height: 768
+      base_positive: "masterpiece, best quality, photorealistic, natural skin, soft lighting, detailed face, high resolution"
+      base_negative: "nsfw, lowres, bad anatomy, bad hands, text, watermark, blurry, deformed, cartoon, anime"
+
   img2img:
     realistic:
       model: realismIllustriousBy_v55FP16
@@ -95,6 +105,15 @@ presets:
       sampler_name: DPM++ 2M Karras
       base_positive: "masterpiece, best quality, highly detailed, artstation, concept art"
       base_negative: "nsfw, lowres, bad anatomy, text, watermark, blurry"
+
+    natural:
+      model: chilloutmix_NiPrunedFp32Fix
+      denoising_strength: 0.55
+      steps: 30
+      cfg_scale: 7
+      sampler_name: DPM++ 2M Karras
+      base_positive: "masterpiece, best quality, photorealistic, natural skin, soft lighting, detailed face"
+      base_negative: "nsfw, lowres, bad anatomy, bad hands, text, watermark, blurry, deformed"
 
   upscale:
     default:
@@ -167,6 +186,16 @@ presets:
       base_positive: "masterpiece, best quality, concept art, seamless, natural continuation"
       base_negative: "nsfw, lowres, bad anatomy, text, watermark, blurry"
 
+    natural:
+      model: chilloutmix_NiPrunedFp32Fix
+      denoising_strength: 0.85
+      steps: 30
+      cfg_scale: 7
+      sampler_name: DPM++ 2M Karras
+      expand_pixels: 256
+      base_positive: "masterpiece, best quality, photorealistic, natural skin, seamless, natural continuation"
+      base_negative: "nsfw, lowres, bad anatomy, text, watermark, blurry, abrupt edge, inconsistent"
+
 # Model metadata (sd_version needed to set correct resolution)
 models:
   realismIllustriousBy_v55FP16:
@@ -185,3 +214,7 @@ models:
     sd_version: "XL"
     default_width: 1024
     default_height: 1024
+  chilloutmix_NiPrunedFp32Fix:
+    sd_version: "1.5"
+    default_width: 512
+    default_height: 768
