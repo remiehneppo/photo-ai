@@ -187,6 +187,18 @@ export function listJobs() {
   return request<JobDetail[]>("/api/jobs");
 }
 
+export function inpaintImage(payload: { prompt: string; style: Style; image: File; mask: File; fix_face?: boolean; fix_hands?: boolean; inpaint_full_res?: boolean }) {
+  const form = new FormData();
+  form.set("prompt", payload.prompt);
+  form.set("style", payload.style);
+  form.set("image", payload.image);
+  form.set("mask", payload.mask);
+  form.set("fix_face", String(Boolean(payload.fix_face)));
+  form.set("fix_hands", String(Boolean(payload.fix_hands)));
+  form.set("inpaint_full_res", String(payload.inpaint_full_res !== false));
+  return request<JobResponse>("/api/inpaint", { method: "POST", body: form });
+}
+
 export function deleteJob(id: string) {
   return request<void>(`/api/jobs/${id}`, { method: "DELETE" });
 }

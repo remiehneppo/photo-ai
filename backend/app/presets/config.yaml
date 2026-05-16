@@ -207,6 +207,73 @@ presets:
       base_positive: "(masterpiece, best quality:1.2), photorealistic, natural skin, seamless, natural continuation, consistent lighting, sharp focus"
       base_negative: "(worst quality, low quality:1.4), nsfw, bad anatomy, text, watermark, blurry, abrupt edge, inconsistent, cartoon, seam"
 
+  inpaint:
+    realistic:
+      model: realismIllustriousBy_v55FP16
+      denoising_strength: 0.75
+      steps: 30
+      cfg_scale: 7
+      sampler_name: DPM++ 2M Karras
+      mask_blur: 4
+      inpaint_full_res_padding: 32
+      base_positive: "(masterpiece, best quality:1.2), RAW photo, photorealistic, ultra-detailed, natural skin texture, sharp focus, seamless, coherent with surroundings"
+      base_negative: "(worst quality, low quality:1.4), nsfw, bad anatomy, bad hands, extra fingers, text, watermark, blurry, deformed, seam, inconsistent lighting"
+
+    anime:
+      model: anything-v5
+      denoising_strength: 0.75
+      steps: 20
+      cfg_scale: 7
+      sampler_name: DPM++ 2M Karras
+      mask_blur: 4
+      inpaint_full_res_padding: 32
+      base_positive: "<lora:animeoutlineV4_16:1>, lineart, monochrome, (masterpiece, best quality:1.2), manga style, highly detailed, clean lines, seamless"
+      base_negative: "(worst quality, low quality, normal quality:1.3), nsfw, bad anatomy, text, watermark, blurry, realistic, color, seam"
+
+    advertisement:
+      model: Juggernaut-XL_v9_RunDiffusionPhoto_v2
+      denoising_strength: 0.75
+      steps: 30
+      cfg_scale: 7
+      sampler_name: DPM++ 2M Karras
+      mask_blur: 4
+      inpaint_full_res_padding: 32
+      base_positive: "commercial photography, product shot, professional studio lighting, sharp focus, highly detailed, photorealistic, seamless"
+      base_negative: "(worst quality, low quality:2), nsfw, blurry, grainy, text, watermark, cartoon, deformed, seam"
+
+    portrait:
+      model: realismIllustriousBy_v55FP16
+      denoising_strength: 0.75
+      steps: 30
+      cfg_scale: 7
+      sampler_name: DPM++ 2M Karras
+      mask_blur: 4
+      inpaint_full_res_padding: 32
+      base_positive: "(masterpiece, best quality:1.2), RAW photo, photorealistic, portrait, beautiful face, natural skin texture, detailed eyes, soft lighting, seamless"
+      base_negative: "(worst quality, low quality:1.4), nsfw, bad anatomy, bad hands, extra fingers, text, watermark, blurry, cartoon, deformed, seam"
+
+    artistic:
+      model: v1-5-pruned-emaonly
+      denoising_strength: 0.75
+      steps: 30
+      cfg_scale: 7.5
+      sampler_name: DPM++ 2M Karras
+      mask_blur: 4
+      inpaint_full_res_padding: 32
+      base_positive: "(masterpiece, best quality:1.2), highly detailed, digital painting, concept art, smooth brushwork, seamless, consistent art style"
+      base_negative: "(worst quality, low quality:1.4), nsfw, bad anatomy, text, watermark, blurry, deformed, seam, style inconsistency"
+
+    natural:
+      model: chilloutmix_NiPrunedFp32Fix
+      denoising_strength: 0.75
+      steps: 25
+      cfg_scale: 7
+      sampler_name: DPM++ 2M Karras
+      mask_blur: 4
+      inpaint_full_res_padding: 32
+      base_positive: "(masterpiece, best quality:1.2), photorealistic, natural skin texture, soft lighting, sharp focus, seamless, consistent with surroundings"
+      base_negative: "(worst quality, low quality:1.4), nsfw, bad anatomy, bad hands, extra fingers, text, watermark, blurry, deformed, cartoon, seam"
+
 # Model metadata
 models:
   realismIllustriousBy_v55FP16:

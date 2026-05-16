@@ -2,7 +2,7 @@
 
 import { imageUrl } from "@/lib/api";
 import type { HistoryImageTarget, ImageOut, JobDetail } from "@/types";
-import { Brush, Download, Expand, ImageUp, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Brush, Download, Expand, ImageUp, PenTool, SlidersHorizontal, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 
 export function HistoryGrid({
@@ -54,6 +54,9 @@ export function HistoryGrid({
                     </HistoryIconButton>
                     <HistoryIconButton title="Use in Expand" disabled={busyImageId === output.id} onClick={() => onUseImage?.("outpaint", output)}>
                       <Expand className="h-4 w-4" aria-hidden="true" />
+                    </HistoryIconButton>
+                    <HistoryIconButton title="Use in Inpaint" disabled={busyImageId === output.id} onClick={() => onUseImage?.("inpaint", output)}>
+                      <PenTool className="h-4 w-4" aria-hidden="true" />
                     </HistoryIconButton>
                     <a className="focus-ring rounded-md border border-line p-2 hover:bg-panel" href={imageUrl(output.url)} download={output.filename || "image.png"} title="Download" aria-label="Download">
                       <Download className="h-4 w-4" aria-hidden="true" />

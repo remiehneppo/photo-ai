@@ -4,18 +4,19 @@ import { ActionButton } from "@/components/ActionButton";
 import { HistoryGrid } from "@/components/HistoryGrid";
 import { ImageResult } from "@/components/ImageResult";
 import { ImageUpload } from "@/components/ImageUpload";
+import InpaintCanvas, { type InpaintCanvasHandle } from "@/components/InpaintCanvas";
 import { JobStatus } from "@/components/JobStatus";
 import { PromptInput } from "@/components/PromptInput";
 import { StyleSelector } from "@/components/StyleSelector";
 import { clearToken, getToken } from "@/lib/auth";
-import { deleteJob, editImage, generateImage, generateImageWithReference, getCapabilities, getStyles, imageUrl, listJobs, me, outpaintImage, sharpenImage, upscaleImage } from "@/lib/api";
+import { deleteJob, editImage, generateImage, generateImageWithReference, getCapabilities, getStyles, imageUrl, inpaintImage, listJobs, me, outpaintImage, sharpenImage, upscaleImage } from "@/lib/api";
 import type { Capabilities, ControlMode, Direction, HistoryImageTarget, ImageOut, JobDetail, Style, User } from "@/types";
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Brush, Clock3, Expand, ImageUp, LogOut, SlidersHorizontal, Sparkles, Wand2 } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Brush, Clock3, Expand, ImageUp, LogOut, PenTool, SlidersHorizontal, Sparkles, Wand2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
-type Tab = "generate" | "edit" | "upscale" | "sharpen" | "outpaint" | "history";
+type Tab = "generate" | "edit" | "inpaint" | "upscale" | "sharpen" | "outpaint" | "history";
 type HistoryImageSeed = { target: HistoryImageTarget; file: File };
 
 const fallbackStyles = ["realistic", "anime", "advertisement", "portrait", "artistic", "natural"].map((style) => ({
@@ -29,6 +30,7 @@ const fallbackStyles = ["realistic", "anime", "advertisement", "portrait", "arti
 const tabs: Array<{ id: Tab; label: string; icon: ReactNode }> = [
   { id: "generate", label: "Generate", icon: <Sparkles className="h-4 w-4" /> },
   { id: "edit", label: "Edit", icon: <Brush className="h-4 w-4" /> },
+  { id: "inpaint", label: "Inpaint", icon: <PenTool className="h-4 w-4" /> },
   { id: "upscale", label: "Upscale", icon: <ImageUp className="h-4 w-4" /> },
   { id: "sharpen", label: "Sharpen", icon: <SlidersHorizontal className="h-4 w-4" /> },
   { id: "outpaint", label: "Expand", icon: <Expand className="h-4 w-4" /> },
@@ -109,6 +111,7 @@ export default function DashboardPage() {
         <section className="min-w-0">
           {tab === "generate" && <GenerateTab capabilities={capabilities} styles={styles} />}
           {tab === "edit" && <EditTab capabilities={capabilities} styles={styles} historyImageSeed={historyImageSeed} />}
+          {tab === "inpaint" && <InpaintTab styles={styles} historyImageSeed={historyImageSeed} />}
           {tab === "upscale" && <UpscaleTab historyImageSeed={historyImageSeed} />}
           {tab === "sharpen" && <SharpenTab historyImageSeed={historyImageSeed} />}
           {tab === "outpaint" && <OutpaintTab capabilities={capabilities} styles={styles} historyImageSeed={historyImageSeed} />}
@@ -261,6 +264,63 @@ function EditTab({ capabilities, styles, historyImageSeed }: { capabilities: Cap
         {error && <p className="text-sm text-danger">{error}</p>}
         <ActionButton disabled={loading || !file || !prompt.trim()} icon={<Brush className="h-4 w-4" />}>
           {loading ? "Starting..." : "Edit image"}
+        </ActionButton>
+      </form>
+      <div className="mt-5 grid gap-4">
+        <JobStatus jobId={jobId} onDone={setResult} />
+        <ImageResult job={result} />
+      </div>
+    </Panel>
+  );
+}
+
+function InpaintTab({ styles, historyImageSeed }: { styles: typeof fallbackStyles; historyImageSeed: HistoryImageSeed | null }) {
+  const [prompt, setPrompt] = useState("");
+  const [style, setStyle] = useState<Style>("realistic");
+  const [file, setFile] = useState<File | null>(() => (historyImageSeed?.target === "inpaint" ? historyImageSeed.file : null));
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [result, setResult] = useState<JobDetail | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const canvasRef = useRef<InpaintCanvasHandle>(null);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!file) return;
+    if (!canvasRef.current?.hasMask()) {
+      setError("Please paint the area you want to change first.");
+      return;
+    }
+    setError("");
+    setLoading(true);
+    setResult(null);
+    try {
+      const maskBlob = await canvasRef.current.getMaskBlob();
+      const maskFile = new File([maskBlob], "mask.png", { type: "image/png" });
+      const job = await inpaintImage({ prompt, style, image: file, mask: maskFile });
+      setJobId(job.job_id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not start inpaint");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Panel title="Inpaint">
+      <form onSubmit={submit} className="grid gap-4">
+        <ImageUpload file={file} onChange={setFile} />
+        {file && (
+          <div>
+            <p className="mb-2 text-sm font-medium text-ink">Paint the area to change</p>
+            <InpaintCanvas ref={canvasRef} imageFile={file} />
+          </div>
+        )}
+        <StyleSelector value={style} onChange={setStyle} styles={styles} />
+        <PromptInput value={prompt} onChange={setPrompt} placeholder="Describe what should appear in the selected area..." />
+        {error && <p className="text-sm text-danger">{error}</p>}
+        <ActionButton disabled={loading || !file || !prompt.trim()} icon={<PenTool className="h-4 w-4" />}>
+          {loading ? "Starting..." : "Inpaint selected area"}
         </ActionButton>
       </form>
       <div className="mt-5 grid gap-4">
