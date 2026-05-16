@@ -7,8 +7,10 @@ presets:
       sampler_name: DPM++ 2M Karras
       width: 768
       height: 1024
-      base_positive: "masterpiece, best quality, ultra detailed, photorealistic, 8k, sharp focus"
-      base_negative: "nsfw, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, jpeg artifacts, signature, watermark, blurry, deformed"
+      # realismIllustriousBy v55: SD 1.5 photorealism model. RAW photo + natural skin texture key triggers.
+      # Structure: quality → medium → lighting → details (stable-diffusion-art.com/prompt-guide)
+      base_positive: "(masterpiece, best quality:1.2), RAW photo, photorealistic, ultra-detailed, natural skin texture, realistic eyes, sharp focus, cinematic lighting, depth of field"
+      base_negative: "(worst quality, low quality:1.4), nsfw, bad anatomy, bad hands, extra fingers, missing fingers, text, signature, watermark, blurry, deformed, jpeg artifacts, cropped, duplicate, ugly"
 
     anime:
       model: anything-v5
@@ -17,18 +19,22 @@ presets:
       sampler_name: DPM++ 2M Karras
       width: 512
       height: 768
-      base_positive: "<lora:animeoutlineV4_16:1>, lineart, monochrome, masterpiece, best quality, manga style, highly detailed, clean lines"
-      base_negative: "nsfw, lowres, bad anatomy, bad hands, text, watermark, blurry, realistic, 3d render, ugly, duplicate, color"
+      # anything-v5 + animeoutlineV4_16 LoRA (civitai #16014). Trigger words: lineart, monochrome.
+      # Author rec: steps=20, cfg=7, DPM++ 2M Karras, LoRA strength=1.
+      base_positive: "<lora:animeoutlineV4_16:1>, lineart, monochrome, (masterpiece, best quality:1.2), manga style, highly detailed, clean lines, intricate details"
+      base_negative: "(worst quality, low quality, normal quality:1.3), nsfw, bad anatomy, bad hands, extra fingers, text, watermark, blurry, realistic, 3d render, ugly, duplicate, color, grainy"
 
     advertisement:
       model: Juggernaut-XL_v9_RunDiffusionPhoto_v2
-      steps: 35
-      cfg_scale: 6.5
+      steps: 30
+      cfg_scale: 7
       sampler_name: DPM++ 2M Karras
       width: 1024
       height: 1024
-      base_positive: "commercial photography, product shot, studio lighting, clean background, professional, 4k, crisp detail, advertisement quality"
-      base_negative: "nsfw, amateur, low quality, blurry, noise, distortion, overexposed, underexposed, text, watermark"
+      # Juggernaut XL v9: SDXL model. Less quality-tag reliance (SDXL trained for quality by default).
+      # Focus on descriptive commercial photography language. Weighted negative more effective on SDXL.
+      base_positive: "commercial photography, product shot, professional studio lighting, clean background, sharp focus, highly detailed, photorealistic, 8k, crisp edges, advertisement quality"
+      base_negative: "(worst quality, low quality:2), nsfw, amateur, blurry, grainy, noise, distortion, overexposed, underexposed, text, watermark, cartoon, painting, illustration, deformed"
 
     portrait:
       model: realismIllustriousBy_v55FP16
@@ -37,8 +43,9 @@ presets:
       sampler_name: DPM++ 2M Karras
       width: 512
       height: 768
-      base_positive: "masterpiece, best quality, portrait, beautiful face, detailed skin, soft lighting, professional photo"
-      base_negative: "nsfw, lowres, bad anatomy, bad hands, text, watermark, blurry, cartoon, anime, painting"
+      # Close-up portrait — shallow DoF, catchlights, soft rim light key for portrait realism.
+      base_positive: "(masterpiece, best quality:1.2), RAW photo, photorealistic, portrait, beautiful face, natural skin texture, detailed eyes with catchlights, soft rim lighting, shallow depth of field, sharp focus"
+      base_negative: "(worst quality, low quality:1.4), nsfw, bad anatomy, bad hands, extra fingers, text, signature, watermark, blurry, cartoon, anime, painting, deformed, ugly, duplicate"
 
     artistic:
       model: v1-5-pruned-emaonly
@@ -47,18 +54,22 @@ presets:
       sampler_name: DPM++ 2M Karras
       width: 768
       height: 768
-      base_positive: "masterpiece, best quality, highly detailed, artstation, concept art, smooth, sharp focus, illustration"
-      base_negative: "nsfw, lowres, bad anatomy, bad hands, text, watermark, blurry, ugly, duplicate"
+      # SD 1.5 base: versatile illustration/concept art. Artstation + digital painting steer toward polished art.
+      # Slightly higher CFG (7.5) for stronger stylistic adherence.
+      base_positive: "(masterpiece, best quality:1.2), highly detailed, digital painting, trending on artstation, concept art, smooth brushwork, sharp focus, vivid colors, illustration, dynamic lighting"
+      base_negative: "(worst quality, low quality:1.4), nsfw, bad anatomy, bad hands, extra fingers, text, watermark, blurry, ugly, duplicate, deformed, grainy, poorly drawn face, poorly drawn hands"
 
     natural:
       model: chilloutmix_NiPrunedFp32Fix
-      steps: 30
+      steps: 25
       cfg_scale: 7
       sampler_name: DPM++ 2M Karras
       width: 512
       height: 768
-      base_positive: "masterpiece, best quality, photorealistic, natural skin, soft lighting, detailed face, high resolution"
-      base_negative: "nsfw, lowres, bad anatomy, bad hands, text, watermark, blurry, deformed, cartoon, anime"
+      # ChilloutMix: SD 1.5 photo-realistic Asian portrait model. Sweet spot 24-28 steps per community.
+      # Natural skin, golden hour lighting and bokeh are strong triggers for this model.
+      base_positive: "(masterpiece, best quality:1.2), photorealistic, natural skin texture, soft golden hour lighting, detailed eyes, sharp focus, bokeh, depth of field, upper body, high resolution"
+      base_negative: "(worst quality, low quality:1.4), nsfw, bad anatomy, bad hands, extra fingers, cloned face, text, signature, watermark, blurry, deformed, cartoon, anime, jpeg artifacts, cropped"
 
   img2img:
     realistic:
@@ -67,8 +78,8 @@ presets:
       steps: 30
       cfg_scale: 7
       sampler_name: DPM++ 2M Karras
-      base_positive: "masterpiece, best quality, ultra detailed, photorealistic, 8k"
-      base_negative: "nsfw, lowres, bad anatomy, bad hands, text, watermark, blurry, deformed"
+      base_positive: "(masterpiece, best quality:1.2), RAW photo, photorealistic, ultra-detailed, natural skin texture, sharp focus, cinematic lighting"
+      base_negative: "(worst quality, low quality:1.4), nsfw, bad anatomy, bad hands, extra fingers, text, watermark, blurry, deformed, jpeg artifacts, duplicate"
 
     anime:
       model: anything-v5
@@ -76,17 +87,17 @@ presets:
       steps: 20
       cfg_scale: 7
       sampler_name: DPM++ 2M Karras
-      base_positive: "<lora:animeoutlineV4_16:1>, lineart, monochrome, masterpiece, best quality, manga style, highly detailed, clean lines"
-      base_negative: "nsfw, lowres, bad anatomy, bad hands, text, watermark, blurry, realistic, color"
+      base_positive: "<lora:animeoutlineV4_16:1>, lineart, monochrome, (masterpiece, best quality:1.2), manga style, highly detailed, clean lines"
+      base_negative: "(worst quality, low quality, normal quality:1.3), nsfw, bad anatomy, bad hands, extra fingers, text, watermark, blurry, realistic, color, grainy"
 
     advertisement:
       model: Juggernaut-XL_v9_RunDiffusionPhoto_v2
       denoising_strength: 0.5
-      steps: 35
-      cfg_scale: 6.5
+      steps: 30
+      cfg_scale: 7
       sampler_name: DPM++ 2M Karras
-      base_positive: "commercial photography, product shot, studio lighting, professional, 4k"
-      base_negative: "nsfw, low quality, blurry, noise, text, watermark"
+      base_positive: "commercial photography, product shot, professional studio lighting, sharp focus, highly detailed, photorealistic, crisp edges"
+      base_negative: "(worst quality, low quality:2), nsfw, blurry, grainy, noise, text, watermark, cartoon, deformed, overexposed, underexposed"
 
     portrait:
       model: realismIllustriousBy_v55FP16
@@ -94,8 +105,8 @@ presets:
       steps: 30
       cfg_scale: 7
       sampler_name: DPM++ 2M Karras
-      base_positive: "masterpiece, best quality, portrait, beautiful face, detailed skin"
-      base_negative: "nsfw, lowres, bad anatomy, bad hands, text, watermark, blurry"
+      base_positive: "(masterpiece, best quality:1.2), RAW photo, photorealistic, portrait, beautiful face, natural skin texture, detailed eyes with catchlights, soft lighting, shallow depth of field"
+      base_negative: "(worst quality, low quality:1.4), nsfw, bad anatomy, bad hands, extra fingers, text, watermark, blurry, cartoon, deformed, ugly"
 
     artistic:
       model: v1-5-pruned-emaonly
@@ -103,17 +114,17 @@ presets:
       steps: 30
       cfg_scale: 7.5
       sampler_name: DPM++ 2M Karras
-      base_positive: "masterpiece, best quality, highly detailed, artstation, concept art"
-      base_negative: "nsfw, lowres, bad anatomy, text, watermark, blurry"
+      base_positive: "(masterpiece, best quality:1.2), highly detailed, digital painting, trending on artstation, concept art, smooth brushwork, vivid colors"
+      base_negative: "(worst quality, low quality:1.4), nsfw, bad anatomy, bad hands, text, watermark, blurry, deformed, grainy, poorly drawn"
 
     natural:
       model: chilloutmix_NiPrunedFp32Fix
       denoising_strength: 0.55
-      steps: 30
+      steps: 25
       cfg_scale: 7
       sampler_name: DPM++ 2M Karras
-      base_positive: "masterpiece, best quality, photorealistic, natural skin, soft lighting, detailed face"
-      base_negative: "nsfw, lowres, bad anatomy, bad hands, text, watermark, blurry, deformed"
+      base_positive: "(masterpiece, best quality:1.2), photorealistic, natural skin texture, soft lighting, detailed eyes, sharp focus, depth of field"
+      base_negative: "(worst quality, low quality:1.4), nsfw, bad anatomy, bad hands, extra fingers, cloned face, text, watermark, blurry, deformed, cartoon, anime"
 
   upscale:
     default:
@@ -143,8 +154,8 @@ presets:
       cfg_scale: 7
       sampler_name: DPM++ 2M Karras
       expand_pixels: 256
-      base_positive: "masterpiece, best quality, photorealistic, seamless, natural continuation"
-      base_negative: "nsfw, lowres, bad anatomy, text, watermark, blurry, abrupt edge, inconsistent"
+      base_positive: "(masterpiece, best quality:1.2), RAW photo, photorealistic, seamless, natural continuation, consistent lighting, sharp focus"
+      base_negative: "(worst quality, low quality:1.4), nsfw, bad anatomy, text, watermark, blurry, abrupt edge, inconsistent lighting, seam, duplicate"
 
     anime:
       model: anything-v5
@@ -153,18 +164,18 @@ presets:
       cfg_scale: 7
       sampler_name: DPM++ 2M Karras
       expand_pixels: 256
-      base_positive: "<lora:animeoutlineV4_16:1>, lineart, monochrome, masterpiece, best quality, manga style, seamless, natural continuation"
-      base_negative: "nsfw, lowres, bad anatomy, text, watermark, blurry, inconsistent, color"
+      base_positive: "<lora:animeoutlineV4_16:1>, lineart, monochrome, (masterpiece, best quality:1.2), manga style, seamless, natural continuation, consistent line weight"
+      base_negative: "(worst quality, low quality, normal quality:1.3), nsfw, bad anatomy, text, watermark, blurry, inconsistent, abrupt edge, color"
 
     advertisement:
       model: Juggernaut-XL_v9_RunDiffusionPhoto_v2
       denoising_strength: 0.85
       steps: 35
-      cfg_scale: 6.5
+      cfg_scale: 7
       sampler_name: DPM++ 2M Karras
       expand_pixels: 256
-      base_positive: "commercial photography, studio lighting, seamless, professional, natural continuation"
-      base_negative: "nsfw, low quality, blurry, inconsistent lighting, abrupt edge"
+      base_positive: "commercial photography, professional studio lighting, seamless, natural continuation, consistent background, sharp focus, photorealistic"
+      base_negative: "(worst quality, low quality:2), nsfw, blurry, inconsistent lighting, abrupt edge, seam, text, watermark, cartoon, deformed"
 
     portrait:
       model: realismIllustriousBy_v55FP16
@@ -173,8 +184,8 @@ presets:
       cfg_scale: 7
       sampler_name: DPM++ 2M Karras
       expand_pixels: 256
-      base_positive: "masterpiece, best quality, portrait, seamless, natural continuation"
-      base_negative: "nsfw, lowres, bad anatomy, text, watermark, blurry"
+      base_positive: "(masterpiece, best quality:1.2), RAW photo, photorealistic, portrait, seamless, natural continuation, consistent lighting and skin tone"
+      base_negative: "(worst quality, low quality:1.4), nsfw, bad anatomy, text, watermark, blurry, abrupt edge, inconsistent skin, seam"
 
     artistic:
       model: v1-5-pruned-emaonly
@@ -183,38 +194,51 @@ presets:
       cfg_scale: 7.5
       sampler_name: DPM++ 2M Karras
       expand_pixels: 256
-      base_positive: "masterpiece, best quality, concept art, seamless, natural continuation"
-      base_negative: "nsfw, lowres, bad anatomy, text, watermark, blurry"
+      base_positive: "(masterpiece, best quality:1.2), digital painting, trending on artstation, concept art, seamless, natural continuation, consistent art style"
+      base_negative: "(worst quality, low quality:1.4), nsfw, bad anatomy, text, watermark, blurry, abrupt edge, inconsistent style, seam"
 
     natural:
       model: chilloutmix_NiPrunedFp32Fix
       denoising_strength: 0.85
-      steps: 30
+      steps: 25
       cfg_scale: 7
       sampler_name: DPM++ 2M Karras
       expand_pixels: 256
-      base_positive: "masterpiece, best quality, photorealistic, natural skin, seamless, natural continuation"
-      base_negative: "nsfw, lowres, bad anatomy, text, watermark, blurry, abrupt edge, inconsistent"
+      base_positive: "(masterpiece, best quality:1.2), photorealistic, natural skin, seamless, natural continuation, consistent lighting, sharp focus"
+      base_negative: "(worst quality, low quality:1.4), nsfw, bad anatomy, text, watermark, blurry, abrupt edge, inconsistent, cartoon, seam"
 
-# Model metadata (sd_version needed to set correct resolution)
+# Model metadata
 models:
   realismIllustriousBy_v55FP16:
     sd_version: "1.5"
     default_width: 768
     default_height: 1024
+    # Merge of Illustrious + realism LoRAs. Strong photorealism, portrait-focused.
+    # Key triggers: RAW photo, natural skin texture, realistic eyes
+    clip_skip: 2
   v1-5-pruned-emaonly:
     sd_version: "1.5"
     default_width: 512
     default_height: 512
+    # SD 1.5 base model. Best for illustration/concept art with artstation-style prompts.
+    clip_skip: 1
   anything-v5:
     sd_version: "1.5"
     default_width: 512
     default_height: 768
+    # Anime-focused merge. Used with animeoutlineV4_16 LoRA for manga/lineart style.
+    # LoRA trigger: lineart, monochrome
+    clip_skip: 2
   Juggernaut-XL_v9_RunDiffusionPhoto_v2:
     sd_version: "XL"
     default_width: 1024
     default_height: 1024
+    # SDXL photorealism model. Quality baked in — use descriptive prompts, weighted negatives.
+    clip_skip: 1
   chilloutmix_NiPrunedFp32Fix:
     sd_version: "1.5"
     default_width: 512
     default_height: 768
+    # Realistic portrait model, strong Asian face aesthetics. Sweet spot: 24-28 steps, CFG 5-7.
+    # Key triggers: natural skin texture, golden hour lighting, bokeh
+    clip_skip: 2
