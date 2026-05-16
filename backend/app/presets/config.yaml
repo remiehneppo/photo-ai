@@ -12,13 +12,13 @@ presets:
 
     anime:
       model: anything-v5
-      steps: 28
-      cfg_scale: 7.5
-      sampler_name: Euler a
+      steps: 20
+      cfg_scale: 7
+      sampler_name: DPM++ 2M Karras
       width: 512
       height: 768
-      base_positive: "masterpiece, best quality, anime style, highly detailed, beautiful lighting, vibrant colors"
-      base_negative: "nsfw, lowres, bad anatomy, bad hands, text, watermark, blurry, realistic, 3d render, ugly, duplicate"
+      base_positive: "<lora:animeoutlineV4_16:1>, lineart, monochrome, masterpiece, best quality, manga style, highly detailed, clean lines"
+      base_negative: "nsfw, lowres, bad anatomy, bad hands, text, watermark, blurry, realistic, 3d render, ugly, duplicate, color"
 
     advertisement:
       model: Juggernaut-XL_v9_RunDiffusionPhoto_v2
@@ -73,11 +73,11 @@ presets:
     anime:
       model: anything-v5
       denoising_strength: 0.6
-      steps: 28
-      cfg_scale: 7.5
-      sampler_name: Euler a
-      base_positive: "masterpiece, best quality, anime style, highly detailed"
-      base_negative: "nsfw, lowres, bad anatomy, bad hands, text, watermark, blurry, realistic"
+      steps: 20
+      cfg_scale: 7
+      sampler_name: DPM++ 2M Karras
+      base_positive: "<lora:animeoutlineV4_16:1>, lineart, monochrome, masterpiece, best quality, manga style, highly detailed, clean lines"
+      base_negative: "nsfw, lowres, bad anatomy, bad hands, text, watermark, blurry, realistic, color"
 
     advertisement:
       model: Juggernaut-XL_v9_RunDiffusionPhoto_v2
@@ -149,12 +149,12 @@ presets:
     anime:
       model: anything-v5
       denoising_strength: 0.85
-      steps: 30
-      cfg_scale: 7.5
-      sampler_name: Euler a
+      steps: 20
+      cfg_scale: 7
+      sampler_name: DPM++ 2M Karras
       expand_pixels: 256
-      base_positive: "masterpiece, best quality, anime style, seamless, natural continuation"
-      base_negative: "nsfw, lowres, bad anatomy, text, watermark, blurry, inconsistent"
+      base_positive: "<lora:animeoutlineV4_16:1>, lineart, monochrome, masterpiece, best quality, manga style, seamless, natural continuation"
+      base_negative: "nsfw, lowres, bad anatomy, text, watermark, blurry, inconsistent, color"
 
     advertisement:
       model: Juggernaut-XL_v9_RunDiffusionPhoto_v2
