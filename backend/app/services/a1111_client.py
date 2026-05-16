@@ -1,7 +1,10 @@
 import base64
+import json
 import logging
-import httpx
 from typing import Any
+
+import httpx
+
 from app.config import A1111_BASE_URL, A1111_OFFLOAD_BEFORE_JOB, A1111_TIMEOUT_SECONDS
 
 logger = logging.getLogger("photo_ai.a1111")
@@ -45,19 +48,21 @@ class A1111Client:
             r = await client.post(f"{self.base_url}/sdapi/v1/unload-checkpoint")
             self._raise_for_status(r, "unload_checkpoint")
 
-    async def txt2img(self, payload: dict[str, Any]) -> list[str]:
-        """Returns list of base64-encoded images."""
+    async def txt2img(self, payload: dict[str, Any]) -> tuple[list[str], int | None]:
+        """Returns list of base64-encoded images and the seed used."""
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             r = await client.post(f"{self.base_url}/sdapi/v1/txt2img", json=payload)
             self._raise_for_status(r, "txt2img")
-            return r.json()["images"]
+            data = r.json()
+            return data["images"], _extract_seed(data)
 
-    async def img2img(self, payload: dict[str, Any]) -> list[str]:
-        """Returns list of base64-encoded images."""
+    async def img2img(self, payload: dict[str, Any]) -> tuple[list[str], int | None]:
+        """Returns list of base64-encoded images and the seed used."""
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             r = await client.post(f"{self.base_url}/sdapi/v1/img2img", json=payload)
             self._raise_for_status(r, "img2img")
-            return r.json()["images"]
+            data = r.json()
+            return data["images"], _extract_seed(data)
 
     async def upscale(self, payload: dict[str, Any]) -> str:
         """Returns base64-encoded image."""
@@ -65,6 +70,22 @@ class A1111Client:
             r = await client.post(f"{self.base_url}/sdapi/v1/extra-single-image", json=payload)
             self._raise_for_status(r, "upscale")
             return r.json()["image"]
+
+    async def interrupt(self) -> None:
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                await client.post(f"{self.base_url}/sdapi/v1/interrupt")
+        except Exception:
+            logger.warning("a1111_interrupt_failed", exc_info=True)
+
+    async def interrogate(self, b64_image: str, model: str = "clip") -> str:
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            r = await client.post(
+                f"{self.base_url}/sdapi/v1/interrogate",
+                json={"image": b64_image, "model": model},
+            )
+            self._raise_for_status(r, "interrogate")
+            return r.json()["caption"]
 
     async def get_models(self) -> list[dict]:
         async with httpx.AsyncClient(timeout=10) as client:
@@ -137,3 +158,15 @@ def _short_response_text(response: httpx.Response, limit: int = 1000) -> str:
     except Exception:
         return "<unavailable>"
     return text[:limit]
+
+
+def _extract_seed(data: dict[str, Any]) -> int | None:
+    try:
+        info = json.loads(data.get("info", "{}"))
+    except (TypeError, json.JSONDecodeError):
+        return None
+
+    seed = info.get("seed")
+    if isinstance(seed, list):
+        seed = seed[0] if seed else None
+    return int(seed) if isinstance(seed, (int, float, str)) and str(seed).strip() else None

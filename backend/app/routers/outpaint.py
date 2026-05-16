@@ -1,22 +1,25 @@
-import uuid
 import io
+import uuid
+from typing import Optional
+
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from PIL import Image as PILImage, UnidentifiedImageError
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, UploadFile, File, Form
-from sqlalchemy.orm import Session
-from app.database import get_db, SessionLocal
-from app.models.user import User
-from app.models.job import Job
-from app.models.image import Image
-from app.services.auth_service import get_current_user
-from app.services.adetailer_service import build_adetailer_scripts, has_adetailer
-from app.services.model_service import add_model_override, resolve_checkpoint
-from app.services.preset_service import available_styles, get_preset, merge_prompt
-from app.services.a1111_client import a1111
-from app.services.storage_service import save_upload, save_output
-from app.services.job_service import run_job
-from app.services.upload_service import read_image_upload
-from app.config import OUTPAINT_MAX_PIXELS
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from app.config import OUTPAINT_MAX_PIXELS
+from app.database import SessionLocal, get_db
+from app.models.image import Image
+from app.models.job import Job
+from app.models.user import User
+from app.services.a1111_client import a1111
+from app.services.adetailer_service import build_adetailer_scripts, has_adetailer
+from app.services.auth_service import get_current_user
+from app.services.job_service import run_job
+from app.services.model_service import add_model_override, resolve_checkpoint
+from app.services.preset_service import available_styles, get_model_meta, get_preset, merge_prompt
+from app.services.storage_service import save_output, save_upload
+from app.services.upload_service import read_image_upload
 
 router = APIRouter(prefix="/api/outpaint", tags=["outpaint"])
 
@@ -55,13 +58,11 @@ def expand_canvas(img_bytes: bytes, direction: str, expand_px: int, max_pixels: 
         new_w, new_h = w + expand_px * 2, h + expand_px * 2
         offset = (expand_px, expand_px)
 
-    # Expanded image (original pasted, rest black)
     expanded = PILImage.new("RGB", (new_w, new_h), (0, 0, 0))
     expanded.paste(img, offset)
 
-    # Mask: white = generate, black = keep
-    mask = PILImage.new("L", (new_w, new_h), 255)  # all white
-    mask.paste(0, (offset[0], offset[1], offset[0] + w, offset[1] + h))  # black on original area
+    mask = PILImage.new("L", (new_w, new_h), 255)
+    mask.paste(0, (offset[0], offset[1], offset[0] + w, offset[1] + h))
 
     if max_pixels > 0 and new_w * new_h > max_pixels:
         scale = (max_pixels / float(new_w * new_h)) ** 0.5
@@ -88,6 +89,7 @@ async def outpaint_image(
     prompt: str = Form(""),
     fix_face: bool = Form(False),
     fix_hands: bool = Form(False),
+    seed: Optional[int] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -131,6 +133,7 @@ async def outpaint_image(
 
     async def task():
         checkpoint = await resolve_checkpoint(a1111, preset["model"])
+        model_meta = get_model_meta(preset["model"])
         await a1111.load_checkpoint(checkpoint)
         positive = merge_prompt(preset["base_positive"], prompt)
         with PILImage.open(io.BytesIO(expanded_bytes)) as expanded_image:
@@ -139,7 +142,7 @@ async def outpaint_image(
             "init_images": [b64_expanded],
             "mask": b64_mask,
             "mask_blur": 8,
-            "inpainting_fill": 1,  # fill
+            "inpainting_fill": 1,
             "inpaint_full_res": False,
             "prompt": positive,
             "negative_prompt": preset["base_negative"],
@@ -149,18 +152,22 @@ async def outpaint_image(
             "sampler_name": preset["sampler_name"],
             "width": expanded_width,
             "height": expanded_height,
+            "seed": seed if seed is not None else -1,
         }
         adetailer = build_adetailer_scripts(fix_face_enabled, fix_hands_enabled)
         if adetailer:
             payload["alwayson_scripts"] = adetailer
-        payload = add_model_override(payload, checkpoint)
-        images = await a1111.img2img(payload)
+        payload = add_model_override(payload, checkpoint, model_meta.get("clip_skip"))
+        images, resolved_seed = await a1111.img2img(payload)
         img_bytes_out = a1111.decode_image(images[0])
         out_path, out_filename = await save_output(img_bytes_out)
         db2 = SessionLocal()
         try:
             db2.add(Image(id=str(uuid.uuid4()), job_id=job_id, user_id=user_id, type="input", file_path=file_path, filename=filename))
             db2.add(Image(id=str(uuid.uuid4()), job_id=job_id, user_id=user_id, type="output", file_path=out_path, filename=out_filename))
+            job2 = db2.query(Job).filter(Job.id == job_id).first()
+            if job2 and resolved_seed is not None:
+                job2.seed = resolved_seed
             db2.commit()
         finally:
             db2.close()

@@ -9,9 +9,9 @@ import { JobStatus } from "@/components/JobStatus";
 import { PromptInput } from "@/components/PromptInput";
 import { StyleSelector } from "@/components/StyleSelector";
 import { clearToken, getToken } from "@/lib/auth";
-import { deleteJob, editImage, generateImage, generateImageWithReference, getCapabilities, getStyles, imageUrl, inpaintImage, listJobs, me, outpaintImage, sharpenImage, upscaleImage } from "@/lib/api";
+import { deleteJob, editImage, generateImage, generateImageWithReference, getCapabilities, getStyles, imageUrl, inpaintImage, interrogateImage, listJobs, me, outpaintImage, sharpenImage, upscaleImage } from "@/lib/api";
 import type { Capabilities, ControlMode, Direction, HistoryImageTarget, ImageOut, JobDetail, Style, User } from "@/types";
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Brush, Clock3, Expand, ImageUp, LogOut, PenTool, SlidersHorizontal, Sparkles, Wand2 } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Brush, Clock3, Expand, ImageUp, Loader2, LogOut, PenTool, SlidersHorizontal, Sparkles, Wand2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
@@ -156,6 +156,7 @@ function GenerateTab({ capabilities, styles }: { capabilities: Capabilities | nu
   const [controlImage, setControlImage] = useState<File | null>(null);
   const [controlMode, setControlMode] = useState<ControlMode>("edges");
   const [controlWeight, setControlWeight] = useState(0.7);
+  const [seed, setSeed] = useState("");
   const [jobId, setJobId] = useState<string | null>(null);
   const [result, setResult] = useState<JobDetail | null>(null);
   const [error, setError] = useState("");
@@ -167,9 +168,10 @@ function GenerateTab({ capabilities, styles }: { capabilities: Capabilities | nu
     setLoading(true);
     setResult(null);
     try {
+      const seedValue = parseOptionalNumber(seed);
       const job = controlImage
-        ? await generateImageWithReference({ prompt, style, control_image: controlImage, control_mode: controlMode, control_weight: controlWeight, fix_face: fixFace, fix_hands: fixHands })
-        : await generateImage({ prompt, style, fix_face: fixFace, fix_hands: fixHands });
+        ? await generateImageWithReference({ prompt, style, control_image: controlImage, control_mode: controlMode, control_weight: controlWeight, fix_face: fixFace, fix_hands: fixHands, seed: seedValue })
+        : await generateImage({ prompt, style, fix_face: fixFace, fix_hands: fixHands, seed: seedValue });
       setJobId(job.job_id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start generation");
@@ -183,6 +185,7 @@ function GenerateTab({ capabilities, styles }: { capabilities: Capabilities | nu
       <form onSubmit={submit} className="grid gap-4">
         <StyleSelector value={style} onChange={setStyle} styles={styles} />
         <PromptInput value={prompt} onChange={setPrompt} />
+        <SeedField value={seed} onChange={setSeed} />
         <ReferenceControl
           capabilities={capabilities}
           file={controlImage}
@@ -215,10 +218,27 @@ function EditTab({ capabilities, styles, historyImageSeed }: { capabilities: Cap
   const [controlMode, setControlMode] = useState<ControlMode>("edges");
   const [controlWeight, setControlWeight] = useState(0.7);
   const [file, setFile] = useState<File | null>(() => (historyImageSeed?.target === "edit" ? historyImageSeed.file : null));
+  const [seed, setSeed] = useState("");
+  const [denoisingStrength, setDenoisingStrength] = useState<number | null>(null);
+  const [interrogating, setInterrogating] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
   const [result, setResult] = useState<JobDetail | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  async function handleSuggestPrompt() {
+    if (!file || interrogating) return;
+    setInterrogating(true);
+    setError("");
+    try {
+      const response = await interrogateImage(file);
+      setPrompt(response.prompt);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not suggest prompt");
+    } finally {
+      setInterrogating(false);
+    }
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -235,7 +255,9 @@ function EditTab({ capabilities, styles, historyImageSeed }: { capabilities: Cap
         fix_hands: fixHands,
         control_image: controlImage,
         control_mode: controlMode,
-        control_weight: controlWeight
+        control_weight: controlWeight,
+        seed: parseOptionalNumber(seed),
+        denoising_strength: denoisingStrength
       });
       setJobId(job.job_id);
     } catch (err) {
@@ -249,8 +271,11 @@ function EditTab({ capabilities, styles, historyImageSeed }: { capabilities: Cap
     <Panel title="Edit">
       <form onSubmit={submit} className="grid gap-4">
         <ImageUpload file={file} onChange={setFile} />
+        {file && <SuggestPromptButton loading={interrogating} onClick={handleSuggestPrompt} />}
         <StyleSelector value={style} onChange={setStyle} styles={styles} />
         <PromptInput value={prompt} onChange={setPrompt} placeholder="Describe the change..." />
+        <SeedField value={seed} onChange={setSeed} />
+        <DenoisingControl value={denoisingStrength} defaultValue={0.55} onChange={setDenoisingStrength} />
         <ReferenceControl
           capabilities={capabilities}
           file={controlImage}
@@ -278,11 +303,28 @@ function InpaintTab({ styles, historyImageSeed }: { styles: typeof fallbackStyle
   const [prompt, setPrompt] = useState("");
   const [style, setStyle] = useState<Style>("realistic");
   const [file, setFile] = useState<File | null>(() => (historyImageSeed?.target === "inpaint" ? historyImageSeed.file : null));
+  const [seed, setSeed] = useState("");
+  const [denoisingStrength, setDenoisingStrength] = useState<number | null>(null);
+  const [interrogating, setInterrogating] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
   const [result, setResult] = useState<JobDetail | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const canvasRef = useRef<InpaintCanvasHandle>(null);
+
+  async function handleSuggestPrompt() {
+    if (!file || interrogating) return;
+    setInterrogating(true);
+    setError("");
+    try {
+      const response = await interrogateImage(file);
+      setPrompt(response.prompt);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not suggest prompt");
+    } finally {
+      setInterrogating(false);
+    }
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -297,7 +339,14 @@ function InpaintTab({ styles, historyImageSeed }: { styles: typeof fallbackStyle
     try {
       const maskBlob = await canvasRef.current.getMaskBlob();
       const maskFile = new File([maskBlob], "mask.png", { type: "image/png" });
-      const job = await inpaintImage({ prompt, style, image: file, mask: maskFile });
+      const job = await inpaintImage({
+        prompt,
+        style,
+        image: file,
+        mask: maskFile,
+        seed: parseOptionalNumber(seed),
+        denoising_strength: denoisingStrength
+      });
       setJobId(job.job_id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start inpaint");
@@ -310,6 +359,7 @@ function InpaintTab({ styles, historyImageSeed }: { styles: typeof fallbackStyle
     <Panel title="Inpaint">
       <form onSubmit={submit} className="grid gap-4">
         <ImageUpload file={file} onChange={setFile} />
+        {file && <SuggestPromptButton loading={interrogating} onClick={handleSuggestPrompt} />}
         {file && (
           <div>
             <p className="mb-2 text-sm font-medium text-ink">Paint the area to change</p>
@@ -318,6 +368,8 @@ function InpaintTab({ styles, historyImageSeed }: { styles: typeof fallbackStyle
         )}
         <StyleSelector value={style} onChange={setStyle} styles={styles} />
         <PromptInput value={prompt} onChange={setPrompt} placeholder="Describe what should appear in the selected area..." />
+        <SeedField value={seed} onChange={setSeed} />
+        <DenoisingControl value={denoisingStrength} defaultValue={0.75} onChange={setDenoisingStrength} />
         {error && <p className="text-sm text-danger">{error}</p>}
         <ActionButton disabled={loading || !file || !prompt.trim()} icon={<PenTool className="h-4 w-4" />}>
           {loading ? "Starting..." : "Inpaint selected area"}
@@ -511,6 +563,7 @@ function OutpaintTab({ capabilities, styles, historyImageSeed }: { capabilities:
   const [fixHands, setFixHands] = useState(false);
   const [direction, setDirection] = useState<Direction>("all");
   const [file, setFile] = useState<File | null>(() => (historyImageSeed?.target === "outpaint" ? historyImageSeed.file : null));
+  const [seed, setSeed] = useState("");
   const [jobId, setJobId] = useState<string | null>(null);
   const [result, setResult] = useState<JobDetail | null>(null);
   const [error, setError] = useState("");
@@ -523,7 +576,7 @@ function OutpaintTab({ capabilities, styles, historyImageSeed }: { capabilities:
     setLoading(true);
     setResult(null);
     try {
-      const job = await outpaintImage({ prompt, style, direction, image: file, fix_face: fixFace, fix_hands: fixHands });
+      const job = await outpaintImage({ prompt, style, direction, image: file, fix_face: fixFace, fix_hands: fixHands, seed: parseOptionalNumber(seed) });
       setJobId(job.job_id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start expand");
@@ -539,6 +592,7 @@ function OutpaintTab({ capabilities, styles, historyImageSeed }: { capabilities:
         <DirectionSelector value={direction} onChange={setDirection} />
         <StyleSelector value={style} onChange={setStyle} styles={styles} />
         <PromptInput value={prompt} onChange={setPrompt} placeholder="Optional context for the new area..." />
+        <SeedField value={seed} onChange={setSeed} />
         <FixOptions capabilities={capabilities} fixFace={fixFace} fixHands={fixHands} onFixFace={setFixFace} onFixHands={setFixHands} />
         {error && <p className="text-sm text-danger">{error}</p>}
         <ActionButton disabled={loading || !file} icon={<Expand className="h-4 w-4" />}>
@@ -690,4 +744,80 @@ function HistoryTab({ onUseImage }: { onUseImage: (target: HistoryImageTarget, f
       <HistoryGrid jobs={jobs} busyJobId={busyJobId} busyImageId={busyImageId} onDelete={removeJob} onUseImage={useImage} />
     </Panel>
   );
+}
+
+function SeedField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="grid gap-2 text-sm font-semibold">
+      Seed
+      <input
+        type="number"
+        step="1"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder="-1 for random"
+        className="focus-ring h-11 rounded-md border border-line bg-white px-3 text-sm"
+      />
+      <span className="text-xs font-normal text-muted">Leave blank for random, or enter a seed to reproduce a result.</span>
+    </label>
+  );
+}
+
+function DenoisingControl({ value, defaultValue, onChange }: { value: number | null; defaultValue: number; onChange: (value: number | null) => void }) {
+  const enabled = value !== null;
+  const sliderValue = value ?? defaultValue;
+
+  return (
+    <div className="grid gap-3 rounded-md border border-line bg-white p-3">
+      <label className="flex items-center gap-2 text-sm font-semibold text-ink">
+        <input
+          className="h-4 w-4 accent-accent"
+          type="checkbox"
+          checked={enabled}
+          onChange={(event) => onChange(event.target.checked ? defaultValue : null)}
+        />
+        Custom denoising
+      </label>
+      {enabled && (
+        <label className="grid gap-2 text-sm font-semibold">
+          Denoising strength
+          <input
+            type="range"
+            min="0.1"
+            max="1.0"
+            step="0.05"
+            value={sliderValue}
+            onChange={(event) => onChange(Number(event.target.value))}
+            className="accent-accent"
+          />
+          <span className="text-xs text-muted">{formatSliderValue(sliderValue)}</span>
+        </label>
+      )}
+    </div>
+  );
+}
+
+function SuggestPromptButton({ loading, onClick }: { loading: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={loading}
+      className="focus-ring inline-flex h-11 items-center justify-center gap-2 rounded-md border border-line bg-white px-4 text-sm font-semibold text-ink hover:bg-panel disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+      {loading ? "Suggesting..." : "Suggest prompt"}
+    </button>
+  );
+}
+
+function parseOptionalNumber(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatSliderValue(value: number) {
+  return value.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
 }

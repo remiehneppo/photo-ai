@@ -1,1 +1,1 @@
-from app.routers import auth, capabilities, generate, edit, upscale, sharpen, outpaint, jobs
+from app.routers import auth, capabilities, edit, generate, inpaint, interrogate, jobs, outpaint, sharpen, upscale

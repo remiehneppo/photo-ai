@@ -1,18 +1,19 @@
-import os
 import logging
+import os
 import time
 import uuid
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from app.database import engine
-from app.models import User, Job, Image
-from app.database import Base
-from app.routers import auth, capabilities, generate, edit, upscale, sharpen, outpaint, jobs, inpaint
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+
 from app.config import STORAGE_PATH
+from app.database import Base, engine
 from app.logging_config import configure_logging
+from app.models import Image, Job, User
+from app.routers import auth, capabilities, edit, generate, inpaint, interrogate, jobs, outpaint, sharpen, upscale
 
 configure_logging()
 logger = logging.getLogger("photo_ai.api")
@@ -93,12 +94,12 @@ app.include_router(capabilities.router)
 app.include_router(generate.router)
 app.include_router(edit.router)
 app.include_router(inpaint.router)
+app.include_router(interrogate.router)
 app.include_router(upscale.router)
 app.include_router(sharpen.router)
 app.include_router(outpaint.router)
 app.include_router(jobs.router)
 
-# Serve stored images
 os.makedirs(f"{STORAGE_PATH}/input", exist_ok=True)
 os.makedirs(f"{STORAGE_PATH}/output", exist_ok=True)
 app.mount("/api/images/input", StaticFiles(directory=f"{STORAGE_PATH}/input"), name="input-images")
@@ -108,5 +109,6 @@ app.mount("/api/images/output", StaticFiles(directory=f"{STORAGE_PATH}/output"),
 @app.get("/health")
 async def health():
     from app.services.a1111_client import a1111
+
     a1111_ok = await a1111.health_check()
     return {"status": "ok", "a1111": "connected" if a1111_ok else "disconnected"}

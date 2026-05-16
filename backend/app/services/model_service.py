@@ -2,8 +2,11 @@ import re
 from typing import Any
 
 
-def add_model_override(payload: dict[str, Any], checkpoint: str) -> dict[str, Any]:
-    payload["override_settings"] = {"sd_model_checkpoint": checkpoint}
+def add_model_override(payload: dict[str, Any], checkpoint: str, clip_skip: int | None = None) -> dict[str, Any]:
+    override_settings = {"sd_model_checkpoint": checkpoint}
+    if clip_skip is not None:
+        override_settings["CLIP_stop_at_last_layers"] = clip_skip
+    payload["override_settings"] = override_settings
     payload["override_settings_restore_afterwards"] = True
     return payload
 

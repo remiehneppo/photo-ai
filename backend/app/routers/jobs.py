@@ -1,12 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlalchemy.orm import Session
-from pydantic import BaseModel
-from typing import Optional
 from datetime import datetime
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
 from app.database import get_db
-from app.models.user import User
-from app.models.job import Job
 from app.models.image import Image
+from app.models.job import Job
+from app.models.user import User
+from app.services.a1111_client import a1111
 from app.services.auth_service import get_current_user
 from app.services.storage_service import delete_image_file, get_image_url
 
@@ -33,6 +36,7 @@ class JobDetail(BaseModel):
     estimated_seconds: Optional[int]
     progress_label: Optional[str]
     error_message: Optional[str]
+    seed: Optional[int]
     created_at: datetime
     completed_at: Optional[datetime]
     images: list[ImageOut]
@@ -67,6 +71,27 @@ def get_job(
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return _build_job_detail(job, db)
+
+
+@router.post("/{job_id}/cancel")
+async def cancel_job(
+    job_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    job = db.query(Job).filter(Job.id == job_id, Job.user_id == current_user.id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status not in {"pending", "processing"}:
+        raise HTTPException(status_code=409, detail="Only pending or processing jobs can be cancelled")
+
+    await a1111.interrupt()
+    job.status = "failed"
+    job.error_message = "Cancelled by user"
+    job.progress_label = "Cancelled"
+    job.completed_at = datetime.utcnow()
+    db.commit()
+    return {"status": "cancelled"}
 
 
 @router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -117,6 +142,7 @@ def _build_job_detail(job: Job, db: Session, images: list[Image] | None = None) 
         estimated_seconds=job.estimated_seconds,
         progress_label=job.progress_label,
         error_message=job.error_message,
+        seed=job.seed,
         created_at=job.created_at,
         completed_at=job.completed_at,
         images=image_outs,

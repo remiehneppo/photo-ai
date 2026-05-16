@@ -103,7 +103,7 @@ export function getStyles() {
   return request<{ styles: Style[] }>("/api/generate/styles");
 }
 
-export function generateImage(payload: { prompt: string; style: Style; fix_face?: boolean; fix_hands?: boolean }) {
+export function generateImage(payload: { prompt: string; style: Style; fix_face?: boolean; fix_hands?: boolean; seed?: number | null }) {
   return request<JobResponse>("/api/generate", {
     method: "POST",
     body: JSON.stringify(payload)
@@ -118,6 +118,7 @@ export function generateImageWithReference(payload: {
   control_weight: number;
   fix_face?: boolean;
   fix_hands?: boolean;
+  seed?: number | null;
 }) {
   const form = new FormData();
   form.set("prompt", payload.prompt);
@@ -127,6 +128,7 @@ export function generateImageWithReference(payload: {
   form.set("control_weight", String(payload.control_weight));
   form.set("fix_face", String(Boolean(payload.fix_face)));
   form.set("fix_hands", String(Boolean(payload.fix_hands)));
+  if (payload.seed != null) form.set("seed", String(payload.seed));
   return request<JobResponse>("/api/generate/reference", { method: "POST", body: form });
 }
 
@@ -139,6 +141,8 @@ export function editImage(payload: {
   control_image?: File | null;
   control_mode?: ControlMode;
   control_weight?: number;
+  seed?: number | null;
+  denoising_strength?: number | null;
 }) {
   const form = new FormData();
   form.set("prompt", payload.prompt);
@@ -146,6 +150,8 @@ export function editImage(payload: {
   form.set("image", payload.image);
   form.set("fix_face", String(Boolean(payload.fix_face)));
   form.set("fix_hands", String(Boolean(payload.fix_hands)));
+  if (payload.seed != null) form.set("seed", String(payload.seed));
+  if (payload.denoising_strength != null) form.set("denoising_strength", String(payload.denoising_strength));
   if (payload.control_image) {
     form.set("control_image", payload.control_image);
     form.set("control_mode", payload.control_mode || "edges");
@@ -168,7 +174,7 @@ export function sharpenImage(payload: { mode: string; image: File }) {
   return request<JobResponse>("/api/sharpen", { method: "POST", body: form });
 }
 
-export function outpaintImage(payload: { prompt: string; style: Style; direction: Direction; image: File; fix_face?: boolean; fix_hands?: boolean }) {
+export function outpaintImage(payload: { prompt: string; style: Style; direction: Direction; image: File; fix_face?: boolean; fix_hands?: boolean; seed?: number | null }) {
   const form = new FormData();
   form.set("prompt", payload.prompt);
   form.set("style", payload.style);
@@ -176,6 +182,7 @@ export function outpaintImage(payload: { prompt: string; style: Style; direction
   form.set("image", payload.image);
   form.set("fix_face", String(Boolean(payload.fix_face)));
   form.set("fix_hands", String(Boolean(payload.fix_hands)));
+  if (payload.seed != null) form.set("seed", String(payload.seed));
   return request<JobResponse>("/api/outpaint", { method: "POST", body: form });
 }
 
@@ -187,7 +194,17 @@ export function listJobs() {
   return request<JobDetail[]>("/api/jobs");
 }
 
-export function inpaintImage(payload: { prompt: string; style: Style; image: File; mask: File; fix_face?: boolean; fix_hands?: boolean; inpaint_full_res?: boolean }) {
+export function inpaintImage(payload: {
+  prompt: string;
+  style: Style;
+  image: File;
+  mask: File;
+  fix_face?: boolean;
+  fix_hands?: boolean;
+  inpaint_full_res?: boolean;
+  seed?: number | null;
+  denoising_strength?: number | null;
+}) {
   const form = new FormData();
   form.set("prompt", payload.prompt);
   form.set("style", payload.style);
@@ -196,7 +213,19 @@ export function inpaintImage(payload: { prompt: string; style: Style; image: Fil
   form.set("fix_face", String(Boolean(payload.fix_face)));
   form.set("fix_hands", String(Boolean(payload.fix_hands)));
   form.set("inpaint_full_res", String(payload.inpaint_full_res !== false));
+  if (payload.seed != null) form.set("seed", String(payload.seed));
+  if (payload.denoising_strength != null) form.set("denoising_strength", String(payload.denoising_strength));
   return request<JobResponse>("/api/inpaint", { method: "POST", body: form });
+}
+
+export function interrogateImage(image: File) {
+  const form = new FormData();
+  form.set("image", image);
+  return request<{ prompt: string }>("/api/interrogate", { method: "POST", body: form });
+}
+
+export function cancelJob(id: string) {
+  return request<{ status: string }>(`/api/jobs/${id}/cancel`, { method: "POST" });
 }
 
 export function deleteJob(id: string) {

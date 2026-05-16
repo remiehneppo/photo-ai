@@ -56,6 +56,7 @@ export type JobDetail = {
   estimated_seconds?: number | null;
   progress_label?: string | null;
   error_message?: string | null;
+  seed?: number | null;
   created_at: string;
   completed_at?: string | null;
   images: ImageOut[];

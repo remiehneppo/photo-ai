@@ -1,6 +1,6 @@
 "use client";
 
-import { getJob } from "@/lib/api";
+import { cancelJob, getJob } from "@/lib/api";
 import type { JobDetail, JobStatus as JobStatusType } from "@/types";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -14,6 +14,7 @@ export function JobStatus({
 }) {
   const [job, setJob] = useState<JobDetail | null>(null);
   const [error, setError] = useState("");
+  const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
     if (!jobId) {
@@ -36,6 +37,9 @@ export function JobStatus({
       }
     }
 
+    setJob(null);
+    setError("");
+    setCancelling(false);
     poll();
     return () => {
       cancelled = true;
@@ -52,13 +56,49 @@ export function JobStatus({
       ? `Step ${job.current_step}/${job.total_steps}`
       : job?.progress_label || "Queued";
   const waitText = formatWait(job?.eta_seconds ?? job?.estimated_seconds ?? null, job?.eta_seconds != null);
+  const canCancel = status === "pending" || status === "processing";
+
+  async function handleCancel() {
+    if (!jobId || !canCancel || cancelling) return;
+    setError("");
+    setCancelling(true);
+    try {
+      await cancelJob(jobId);
+      setJob((current) =>
+        current
+          ? {
+              ...current,
+              status: "failed",
+              error_message: "Cancelled by user",
+              progress_label: "Cancelled"
+            }
+          : current
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not cancel job");
+    } finally {
+      setCancelling(false);
+    }
+  }
 
   return (
     <div className="rounded-md border border-line bg-white p-4">
       <div className="flex items-center gap-3">
         {icon}
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold capitalize">{status}</div>
+          <div className="flex items-center gap-2">
+            <div className="text-sm font-semibold capitalize">{status}</div>
+            {canCancel && (
+              <button
+                type="button"
+                onClick={handleCancel}
+                disabled={cancelling}
+                className="focus-ring rounded-md border border-danger px-2 py-1 text-xs font-semibold text-danger hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {cancelling ? "Cancelling..." : "Cancel"}
+              </button>
+            )}
+          </div>
           <div className="truncate text-xs text-muted">{jobId}</div>
         </div>
       </div>
