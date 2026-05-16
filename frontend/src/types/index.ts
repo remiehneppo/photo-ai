@@ -65,3 +65,8 @@ export type JobDetail = {
 export type ApiError = {
   detail?: string;
 };
+
+export type Suggestions = {
+  prompts_by_task: Record<string, Record<string, string[]>>;
+  style_keywords: Record<string, string[]>;
+};

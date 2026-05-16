@@ -13,7 +13,7 @@ from app.config import STORAGE_PATH
 from app.database import Base, engine
 from app.logging_config import configure_logging
 from app.models import Image, Job, User
-from app.routers import auth, capabilities, edit, generate, inpaint, interrogate, jobs, outpaint, sharpen, upscale
+from app.routers import auth, capabilities, edit, generate, inpaint, interrogate, jobs, outpaint, sharpen, suggestions, upscale
 
 configure_logging()
 logger = logging.getLogger("photo_ai.api")
@@ -99,6 +99,7 @@ app.include_router(upscale.router)
 app.include_router(sharpen.router)
 app.include_router(outpaint.router)
 app.include_router(jobs.router)
+app.include_router(suggestions.router)
 
 os.makedirs(f"{STORAGE_PATH}/input", exist_ok=True)
 os.makedirs(f"{STORAGE_PATH}/output", exist_ok=True)

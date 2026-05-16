@@ -1,7 +1,7 @@
 "use client";
 
 import { clearToken, getToken, setToken } from "@/lib/auth";
-import type { Capabilities, ControlMode, Direction, JobDetail, JobResponse, Style, TokenResponse, User } from "@/types";
+import type { Capabilities, ControlMode, Direction, JobDetail, JobResponse, Style, Suggestions, TokenResponse, User } from "@/types";
 
 const API_PORT = process.env.NEXT_PUBLIC_API_PORT || "8000";
 
@@ -230,4 +230,8 @@ export function cancelJob(id: string) {
 
 export function deleteJob(id: string) {
   return request<void>(`/api/jobs/${id}`, { method: "DELETE" });
+}
+
+export function getSuggestions() {
+  return request<Suggestions>("/api/suggestions");
 }

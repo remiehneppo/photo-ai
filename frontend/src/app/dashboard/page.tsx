@@ -8,9 +8,10 @@ import InpaintCanvas, { type InpaintCanvasHandle } from "@/components/InpaintCan
 import { JobStatus } from "@/components/JobStatus";
 import { PromptInput } from "@/components/PromptInput";
 import { StyleSelector } from "@/components/StyleSelector";
+import { PromptSuggestions } from "@/components/PromptSuggestions";
 import { clearToken, getToken } from "@/lib/auth";
-import { deleteJob, editImage, generateImage, generateImageWithReference, getCapabilities, getStyles, imageUrl, inpaintImage, interrogateImage, listJobs, me, outpaintImage, sharpenImage, upscaleImage } from "@/lib/api";
-import type { Capabilities, ControlMode, Direction, HistoryImageTarget, ImageOut, JobDetail, Style, User } from "@/types";
+import { deleteJob, editImage, generateImage, generateImageWithReference, getCapabilities, getSuggestions, getStyles, imageUrl, inpaintImage, interrogateImage, listJobs, me, outpaintImage, sharpenImage, upscaleImage } from "@/lib/api";
+import type { Capabilities, ControlMode, Direction, HistoryImageTarget, ImageOut, JobDetail, Style, Suggestions, User } from "@/types";
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Brush, Clock3, Expand, ImageUp, Loader2, LogOut, PenTool, SlidersHorizontal, Sparkles, Wand2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
@@ -42,6 +43,7 @@ export default function DashboardPage() {
   const [user, setUser] = useState<User | null>(null);
   const [capabilities, setCapabilities] = useState<Capabilities | null>(null);
   const [styles, setStyles] = useState(fallbackStyles);
+  const [suggestions, setSuggestions] = useState<Suggestions | null>(null);
   const [tab, setTab] = useState<Tab>("generate");
   const [historyImageSeed, setHistoryImageSeed] = useState<HistoryImageSeed | null>(null);
 
@@ -52,6 +54,7 @@ export default function DashboardPage() {
     }
     me().then(setUser).catch(() => router.replace("/login"));
     getCapabilities().then(setCapabilities).catch(() => setCapabilities(null));
+    getSuggestions().then(setSuggestions).catch(() => setSuggestions(null));
     getStyles()
       .then((data) => {
         const nextStyles = data.styles.map((style) => ({
@@ -109,12 +112,12 @@ export default function DashboardPage() {
         </nav>
 
         <section className="min-w-0">
-          {tab === "generate" && <GenerateTab capabilities={capabilities} styles={styles} />}
-          {tab === "edit" && <EditTab capabilities={capabilities} styles={styles} historyImageSeed={historyImageSeed} />}
-          {tab === "inpaint" && <InpaintTab styles={styles} historyImageSeed={historyImageSeed} />}
+          {tab === "generate" && <GenerateTab capabilities={capabilities} styles={styles} suggestions={suggestions} />}
+          {tab === "edit" && <EditTab capabilities={capabilities} styles={styles} historyImageSeed={historyImageSeed} suggestions={suggestions} />}
+          {tab === "inpaint" && <InpaintTab styles={styles} historyImageSeed={historyImageSeed} suggestions={suggestions} />}
           {tab === "upscale" && <UpscaleTab historyImageSeed={historyImageSeed} />}
           {tab === "sharpen" && <SharpenTab historyImageSeed={historyImageSeed} />}
-          {tab === "outpaint" && <OutpaintTab capabilities={capabilities} styles={styles} historyImageSeed={historyImageSeed} />}
+          {tab === "outpaint" && <OutpaintTab capabilities={capabilities} styles={styles} historyImageSeed={historyImageSeed} suggestions={suggestions} />}
           {tab === "history" && <HistoryTab onUseImage={useHistoryImage} />}
         </section>
       </div>
@@ -148,7 +151,7 @@ function Panel({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function GenerateTab({ capabilities, styles }: { capabilities: Capabilities | null; styles: typeof fallbackStyles }) {
+function GenerateTab({ capabilities, styles, suggestions }: { capabilities: Capabilities | null; styles: typeof fallbackStyles; suggestions: Suggestions | null }) {
   const [prompt, setPrompt] = useState("");
   const [style, setStyle] = useState<Style>("realistic");
   const [fixFace, setFixFace] = useState(false);
@@ -161,6 +164,8 @@ function GenerateTab({ capabilities, styles }: { capabilities: Capabilities | nu
   const [result, setResult] = useState<JobDetail | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const allExamples = Object.values(suggestions?.prompts_by_task?.["generate"] ?? {}).flat();
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -184,7 +189,11 @@ function GenerateTab({ capabilities, styles }: { capabilities: Capabilities | nu
     <Panel title="Generate">
       <form onSubmit={submit} className="grid gap-4">
         <StyleSelector value={style} onChange={setStyle} styles={styles} />
-        <PromptInput value={prompt} onChange={setPrompt} />
+        <StyleSuggestionBanner prompt={prompt} currentStyle={style} styleKeywords={suggestions?.style_keywords ?? {}} onApply={setStyle} />
+        <PromptInput value={prompt} onChange={setPrompt} suggestions={allExamples} />
+        {suggestions && (
+          <PromptSuggestions promptsByTask={suggestions.prompts_by_task} task="generate" currentStyle={style} onSelect={setPrompt} />
+        )}
         <SeedField value={seed} onChange={setSeed} />
         <ReferenceControl
           capabilities={capabilities}
@@ -209,7 +218,7 @@ function GenerateTab({ capabilities, styles }: { capabilities: Capabilities | nu
   );
 }
 
-function EditTab({ capabilities, styles, historyImageSeed }: { capabilities: Capabilities | null; styles: typeof fallbackStyles; historyImageSeed: HistoryImageSeed | null }) {
+function EditTab({ capabilities, styles, historyImageSeed, suggestions }: { capabilities: Capabilities | null; styles: typeof fallbackStyles; historyImageSeed: HistoryImageSeed | null; suggestions: Suggestions | null }) {
   const [prompt, setPrompt] = useState("");
   const [style, setStyle] = useState<Style>("realistic");
   const [fixFace, setFixFace] = useState(false);
@@ -225,6 +234,8 @@ function EditTab({ capabilities, styles, historyImageSeed }: { capabilities: Cap
   const [result, setResult] = useState<JobDetail | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const allExamples = Object.values(suggestions?.prompts_by_task?.["edit"] ?? {}).flat();
 
   async function handleSuggestPrompt() {
     if (!file || interrogating) return;
@@ -273,7 +284,11 @@ function EditTab({ capabilities, styles, historyImageSeed }: { capabilities: Cap
         <ImageUpload file={file} onChange={setFile} />
         {file && <SuggestPromptButton loading={interrogating} onClick={handleSuggestPrompt} />}
         <StyleSelector value={style} onChange={setStyle} styles={styles} />
-        <PromptInput value={prompt} onChange={setPrompt} placeholder="Describe the change..." />
+        <StyleSuggestionBanner prompt={prompt} currentStyle={style} styleKeywords={suggestions?.style_keywords ?? {}} onApply={setStyle} />
+        <PromptInput value={prompt} onChange={setPrompt} placeholder="Describe the change..." suggestions={allExamples} />
+        {suggestions && (
+          <PromptSuggestions promptsByTask={suggestions.prompts_by_task} task="edit" currentStyle={style} onSelect={setPrompt} />
+        )}
         <SeedField value={seed} onChange={setSeed} />
         <DenoisingControl value={denoisingStrength} defaultValue={0.55} onChange={setDenoisingStrength} />
         <ReferenceControl
@@ -299,7 +314,7 @@ function EditTab({ capabilities, styles, historyImageSeed }: { capabilities: Cap
   );
 }
 
-function InpaintTab({ styles, historyImageSeed }: { styles: typeof fallbackStyles; historyImageSeed: HistoryImageSeed | null }) {
+function InpaintTab({ styles, historyImageSeed, suggestions }: { styles: typeof fallbackStyles; historyImageSeed: HistoryImageSeed | null; suggestions: Suggestions | null }) {
   const [prompt, setPrompt] = useState("");
   const [style, setStyle] = useState<Style>("realistic");
   const [file, setFile] = useState<File | null>(() => (historyImageSeed?.target === "inpaint" ? historyImageSeed.file : null));
@@ -311,6 +326,8 @@ function InpaintTab({ styles, historyImageSeed }: { styles: typeof fallbackStyle
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const canvasRef = useRef<InpaintCanvasHandle>(null);
+
+  const allExamples = Object.values(suggestions?.prompts_by_task?.["inpaint"] ?? {}).flat();
 
   async function handleSuggestPrompt() {
     if (!file || interrogating) return;
@@ -367,7 +384,11 @@ function InpaintTab({ styles, historyImageSeed }: { styles: typeof fallbackStyle
           </div>
         )}
         <StyleSelector value={style} onChange={setStyle} styles={styles} />
-        <PromptInput value={prompt} onChange={setPrompt} placeholder="Describe what should appear in the selected area..." />
+        <StyleSuggestionBanner prompt={prompt} currentStyle={style} styleKeywords={suggestions?.style_keywords ?? {}} onApply={setStyle} />
+        <PromptInput value={prompt} onChange={setPrompt} placeholder="Describe what should appear in the selected area..." suggestions={allExamples} />
+        {suggestions && (
+          <PromptSuggestions promptsByTask={suggestions.prompts_by_task} task="inpaint" currentStyle={style} onSelect={setPrompt} />
+        )}
         <SeedField value={seed} onChange={setSeed} />
         <DenoisingControl value={denoisingStrength} defaultValue={0.75} onChange={setDenoisingStrength} />
         {error && <p className="text-sm text-danger">{error}</p>}
@@ -556,7 +577,7 @@ function ReferenceControl({
   );
 }
 
-function OutpaintTab({ capabilities, styles, historyImageSeed }: { capabilities: Capabilities | null; styles: typeof fallbackStyles; historyImageSeed: HistoryImageSeed | null }) {
+function OutpaintTab({ capabilities, styles, historyImageSeed, suggestions }: { capabilities: Capabilities | null; styles: typeof fallbackStyles; historyImageSeed: HistoryImageSeed | null; suggestions: Suggestions | null }) {
   const [prompt, setPrompt] = useState("");
   const [style, setStyle] = useState<Style>("realistic");
   const [fixFace, setFixFace] = useState(false);
@@ -568,6 +589,8 @@ function OutpaintTab({ capabilities, styles, historyImageSeed }: { capabilities:
   const [result, setResult] = useState<JobDetail | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const allExamples = Object.values(suggestions?.prompts_by_task?.["outpaint"] ?? {}).flat();
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -591,7 +614,11 @@ function OutpaintTab({ capabilities, styles, historyImageSeed }: { capabilities:
         <ImageUpload file={file} onChange={setFile} />
         <DirectionSelector value={direction} onChange={setDirection} />
         <StyleSelector value={style} onChange={setStyle} styles={styles} />
-        <PromptInput value={prompt} onChange={setPrompt} placeholder="Optional context for the new area..." />
+        <StyleSuggestionBanner prompt={prompt} currentStyle={style} styleKeywords={suggestions?.style_keywords ?? {}} onApply={setStyle} />
+        <PromptInput value={prompt} onChange={setPrompt} placeholder="Optional context for the new area..." suggestions={allExamples} />
+        {suggestions && (
+          <PromptSuggestions promptsByTask={suggestions.prompts_by_task} task="outpaint" currentStyle={style} onSelect={setPrompt} />
+        )}
         <SeedField value={seed} onChange={setSeed} />
         <FixOptions capabilities={capabilities} fixFace={fixFace} fixHands={fixHands} onFixFace={setFixFace} onFixHands={setFixHands} />
         {error && <p className="text-sm text-danger">{error}</p>}
@@ -816,6 +843,47 @@ function parseOptionalNumber(value: string) {
   if (!trimmed) return null;
   const parsed = Number(trimmed);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function suggestStyle(prompt: string, styleKeywords: Record<string, string[]>): string | null {
+  if (!prompt.trim()) return null;
+  const lower = prompt.toLowerCase();
+  for (const [style, keywords] of Object.entries(styleKeywords)) {
+    if (keywords.some((kw) => lower.includes(kw))) {
+      return style;
+    }
+  }
+  return null;
+}
+
+function StyleSuggestionBanner({
+  prompt,
+  currentStyle,
+  styleKeywords,
+  onApply
+}: {
+  prompt: string;
+  currentStyle: Style;
+  styleKeywords: Record<string, string[]>;
+  onApply: (style: Style) => void;
+}) {
+  const suggested = suggestStyle(prompt, styleKeywords);
+  if (!suggested || suggested === currentStyle) return null;
+
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-md border border-accent/30 bg-accent/5 px-4 py-2 text-sm">
+      <span className="text-ink">
+        💡 Suggested style: <strong className="capitalize">{suggested}</strong>
+      </span>
+      <button
+        type="button"
+        onClick={() => onApply(suggested)}
+        className="focus-ring rounded-md border border-accent px-3 py-1 text-xs font-semibold text-accent transition hover:bg-accent hover:text-white"
+      >
+        Apply
+      </button>
+    </div>
+  );
 }
 
 function formatSliderValue(value: number) {
