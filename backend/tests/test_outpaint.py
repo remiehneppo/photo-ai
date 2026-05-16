@@ -33,3 +33,13 @@ def test_expand_canvas_adds_masked_area_to_one_direction():
     assert expanded.size == (14, 8)
     assert mask.getpixel((0, 0)) == 255
     assert mask.getpixel((5, 0)) == 0
+
+
+def test_expand_canvas_caps_large_outpaint_canvas():
+    expanded_bytes, mask_bytes = expand_canvas(png_bytes(768, 512), "all", 256, max_pixels=786_432)
+
+    expanded = Image.open(BytesIO(expanded_bytes))
+    mask = Image.open(BytesIO(mask_bytes))
+
+    assert expanded.size[0] * expanded.size[1] <= 786_432
+    assert expanded.size == mask.size

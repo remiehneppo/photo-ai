@@ -15,6 +15,7 @@ from app.services.a1111_client import a1111
 from app.services.storage_service import save_upload, save_output
 from app.services.job_service import run_job
 from app.services.upload_service import read_image_upload
+from app.config import OUTPAINT_MAX_PIXELS
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/outpaint", tags=["outpaint"])
@@ -27,7 +28,7 @@ class JobResponse(BaseModel):
     status: str
 
 
-def expand_canvas(img_bytes: bytes, direction: str, expand_px: int) -> tuple[bytes, bytes]:
+def expand_canvas(img_bytes: bytes, direction: str, expand_px: int, max_pixels: int = OUTPAINT_MAX_PIXELS) -> tuple[bytes, bytes]:
     """
     Expand the image canvas in the given direction.
     Returns (expanded_image_bytes, mask_bytes) where white=area to fill.
@@ -61,6 +62,13 @@ def expand_canvas(img_bytes: bytes, direction: str, expand_px: int) -> tuple[byt
     # Mask: white = generate, black = keep
     mask = PILImage.new("L", (new_w, new_h), 255)  # all white
     mask.paste(0, (offset[0], offset[1], offset[0] + w, offset[1] + h))  # black on original area
+
+    if max_pixels > 0 and new_w * new_h > max_pixels:
+        scale = (max_pixels / float(new_w * new_h)) ** 0.5
+        resized_w = max(64, int(new_w * scale))
+        resized_h = max(64, int(new_h * scale))
+        expanded = expanded.resize((resized_w, resized_h), PILImage.Resampling.LANCZOS)
+        mask = mask.resize((resized_w, resized_h), PILImage.Resampling.NEAREST)
 
     buf_img = io.BytesIO()
     expanded.save(buf_img, format="PNG")
@@ -123,6 +131,7 @@ async def outpaint_image(
 
     async def task():
         checkpoint = await resolve_checkpoint(a1111, preset["model"])
+        await a1111.load_checkpoint(checkpoint)
         positive = merge_prompt(preset["base_positive"], prompt)
         with PILImage.open(io.BytesIO(expanded_bytes)) as expanded_image:
             expanded_width, expanded_height = expanded_image.size
@@ -156,5 +165,5 @@ async def outpaint_image(
         finally:
             db2.close()
 
-    background_tasks.add_task(run_job, job_id, task, a1111.get_progress)
+    background_tasks.add_task(run_job, job_id, task, a1111.get_progress, a1111.offload_unused_models)
     return JobResponse(job_id=job_id, status="pending")

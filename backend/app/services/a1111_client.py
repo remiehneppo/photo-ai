@@ -2,7 +2,7 @@ import base64
 import logging
 import httpx
 from typing import Any
-from app.config import A1111_BASE_URL
+from app.config import A1111_BASE_URL, A1111_OFFLOAD_BEFORE_JOB, A1111_TIMEOUT_SECONDS
 
 logger = logging.getLogger("photo_ai.a1111")
 
@@ -10,7 +10,7 @@ logger = logging.getLogger("photo_ai.a1111")
 class A1111Client:
     def __init__(self):
         self.base_url = A1111_BASE_URL
-        self.timeout = httpx.Timeout(300.0)
+        self.timeout = httpx.Timeout(A1111_TIMEOUT_SECONDS)
 
     async def health_check(self) -> bool:
         try:
@@ -27,6 +27,23 @@ class A1111Client:
                 json={"sd_model_checkpoint": model_name},
             )
             self._raise_for_status(r, "set_model")
+
+    async def reload_checkpoint(self) -> None:
+        async with httpx.AsyncClient(timeout=60) as client:
+            r = await client.post(f"{self.base_url}/sdapi/v1/reload-checkpoint")
+            self._raise_for_status(r, "reload_checkpoint")
+
+    async def load_checkpoint(self, model_name: str) -> None:
+        await self.set_model(model_name)
+        await self.reload_checkpoint()
+
+    async def offload_unused_models(self) -> None:
+        """Ask A1111 to unload the active checkpoint before loading the next job's model."""
+        if not A1111_OFFLOAD_BEFORE_JOB:
+            return
+        async with httpx.AsyncClient(timeout=30) as client:
+            r = await client.post(f"{self.base_url}/sdapi/v1/unload-checkpoint")
+            self._raise_for_status(r, "unload_checkpoint")
 
     async def txt2img(self, payload: dict[str, Any]) -> list[str]:
         """Returns list of base64-encoded images."""

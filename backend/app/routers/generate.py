@@ -66,6 +66,7 @@ async def generate(
     async def task():
         from app.database import SessionLocal
         checkpoint = await resolve_checkpoint(a1111, preset["model"])
+        await a1111.load_checkpoint(checkpoint)
         positive = merge_prompt(preset["base_positive"], req.prompt)
         payload = {
             "prompt": positive,
@@ -98,7 +99,7 @@ async def generate(
         finally:
             db2.close()
 
-    background_tasks.add_task(run_job, job_id, task, a1111.get_progress)
+    background_tasks.add_task(run_job, job_id, task, a1111.get_progress, a1111.offload_unused_models)
     return JobResponse(job_id=job_id, status="pending")
 
 
@@ -154,6 +155,7 @@ async def generate_with_reference(
     async def task():
         from app.database import SessionLocal
         checkpoint = await resolve_checkpoint(a1111, preset["model"])
+        await a1111.load_checkpoint(checkpoint)
         positive = merge_prompt(preset["base_positive"], prompt)
         payload = {
             "prompt": positive,
@@ -187,7 +189,7 @@ async def generate_with_reference(
         finally:
             db2.close()
 
-    background_tasks.add_task(run_job, job_id, task, a1111.get_progress)
+    background_tasks.add_task(run_job, job_id, task, a1111.get_progress, a1111.offload_unused_models)
     return JobResponse(job_id=job_id, status="pending")
 
 

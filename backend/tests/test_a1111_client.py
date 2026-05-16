@@ -42,8 +42,10 @@ class FakeAsyncClient:
             return Response(status_code=200, data={"message": "pong"})
         return Response(data=[{"title": "model"}])
 
-    async def post(self, url, json):
+    async def post(self, url, json=None):
         self.calls.append(("POST", url, json))
+        if url.endswith("/reload-checkpoint"):
+            return Response(data={})
         if url.endswith("/txt2img"):
             return Response(data={"images": ["txt"]})
         if url.endswith("/img2img"):
@@ -58,14 +60,18 @@ def test_a1111_client_calls_expected_endpoints(monkeypatch):
 
     FakeAsyncClient.calls = []
     monkeypatch.setattr(module.httpx, "AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(module, "A1111_TIMEOUT_SECONDS", 123.0)
     client = A1111Client()
     client.base_url = "http://a1111.local"
 
+    assert client.timeout.read == 123.0
     assert asyncio.run(client.health_check())
     asyncio.run(client.set_model("model-a"))
+    asyncio.run(client.load_checkpoint("model-b"))
     assert asyncio.run(client.txt2img({"prompt": "x"})) == ["txt"]
     assert asyncio.run(client.img2img({"prompt": "x"})) == ["img"]
     assert asyncio.run(client.upscale({"image": "x"})) == "upscaled"
+    asyncio.run(client.offload_unused_models())
     assert asyncio.run(client.get_progress())["progress"] == 0.5
     assert asyncio.run(client.get_upscalers())[0]["name"] == "R-ESRGAN 4x+"
     assert asyncio.run(client.get_extensions())[0]["name"] == "sd-webui-controlnet"
@@ -73,6 +79,9 @@ def test_a1111_client_calls_expected_endpoints(monkeypatch):
     assert asyncio.run(client.sam_heartbeat()) is True
 
     assert ("POST", "http://a1111.local/sdapi/v1/options", {"sd_model_checkpoint": "model-a"}) in FakeAsyncClient.calls
+    assert ("POST", "http://a1111.local/sdapi/v1/options", {"sd_model_checkpoint": "model-b"}) in FakeAsyncClient.calls
+    assert ("POST", "http://a1111.local/sdapi/v1/reload-checkpoint", None) in FakeAsyncClient.calls
+    assert ("POST", "http://a1111.local/sdapi/v1/unload-checkpoint", None) in FakeAsyncClient.calls
     assert ("POST", "http://a1111.local/sdapi/v1/txt2img", {"prompt": "x"}) in FakeAsyncClient.calls
     assert ("GET", "http://a1111.local/sdapi/v1/progress?skip_current_image=true", None) in FakeAsyncClient.calls
     assert ("GET", "http://a1111.local/sdapi/v1/extensions", None) in FakeAsyncClient.calls

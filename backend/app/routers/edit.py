@@ -104,6 +104,7 @@ async def edit_image(
 
     async def task():
         checkpoint = await resolve_checkpoint(a1111, preset["model"])
+        await a1111.load_checkpoint(checkpoint)
         positive = merge_prompt(preset["base_positive"], prompt)
         payload = {
             "init_images": [b64_input],
@@ -132,5 +133,5 @@ async def edit_image(
         finally:
             db2.close()
 
-    background_tasks.add_task(run_job, job_id, task, a1111.get_progress)
+    background_tasks.add_task(run_job, job_id, task, a1111.get_progress, a1111.offload_unused_models)
     return JobResponse(job_id=job_id, status="pending")

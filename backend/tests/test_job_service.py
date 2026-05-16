@@ -144,3 +144,48 @@ def test_a1111_jobs_run_serially(monkeypatch):
     asyncio.run(run_both())
 
     assert events in (["one-start", "one-end", "two-start", "two-end"], ["two-start", "two-end", "one-start", "one-end"])
+
+
+def test_a1111_job_runs_prepare_before_task(monkeypatch):
+    session_factory = make_session_factory()
+    seed_job(session_factory)
+    monkeypatch.setattr(job_service, "SessionLocal", session_factory)
+    events = []
+
+    async def progress():
+        return {}
+
+    async def prepare():
+        events.append("prepare")
+
+    async def task():
+        events.append("task")
+
+    asyncio.run(job_service.run_job("job-1", task, progress, prepare))
+
+    job = get_job(session_factory)
+    assert events == ["prepare", "task"]
+    assert job.status == "done"
+
+
+def test_a1111_job_continues_when_prepare_fails(monkeypatch):
+    session_factory = make_session_factory()
+    seed_job(session_factory)
+    monkeypatch.setattr(job_service, "SessionLocal", session_factory)
+    events = []
+
+    async def progress():
+        return {}
+
+    async def prepare():
+        events.append("prepare")
+        raise RuntimeError("unload unsupported")
+
+    async def task():
+        events.append("task")
+
+    asyncio.run(job_service.run_job("job-1", task, progress, prepare))
+
+    job = get_job(session_factory)
+    assert events == ["prepare", "task"]
+    assert job.status == "done"

@@ -71,5 +71,5 @@ async def upscale_image(
         finally:
             db2.close()
 
-    background_tasks.add_task(run_job, job_id, task, a1111.get_progress)
+    background_tasks.add_task(run_job, job_id, task, a1111.get_progress, a1111.offload_unused_models)
     return JobResponse(job_id=job_id, status="pending")

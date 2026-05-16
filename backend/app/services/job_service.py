@@ -9,6 +9,7 @@ from app.database import SessionLocal
 logger = logging.getLogger("photo_ai.jobs")
 
 ProgressProvider = Callable[[], Awaitable[dict[str, Any]]]
+PrepareProvider = Callable[[], Awaitable[None]]
 _a1111_job_lock = asyncio.Lock()
 
 
@@ -16,6 +17,7 @@ async def run_job(
     job_id: str,
     task_fn: Callable[[], Any],
     progress_provider: ProgressProvider | None = None,
+    prepare_provider: PrepareProvider | None = None,
 ) -> None:
     """Run a generation task, updating job status in DB."""
     db: Session = SessionLocal()
@@ -32,7 +34,10 @@ async def run_job(
         if progress_provider:
             update_job_progress(job_id, progress_percent=1, progress_label="Waiting for AI engine")
             async with _a1111_job_lock:
-                update_job_progress(job_id, progress_percent=2, progress_label="Starting AI engine")
+                if prepare_provider:
+                    update_job_progress(job_id, progress_percent=2, progress_label="Freeing AI memory")
+                    await _run_prepare(job_id, prepare_provider)
+                update_job_progress(job_id, progress_percent=3, progress_label="Starting AI engine")
                 monitor = asyncio.create_task(_monitor_progress(job_id, progress_provider))
                 await task_fn()
         else:
@@ -63,6 +68,13 @@ async def run_job(
             except asyncio.CancelledError:
                 pass
         db.close()
+
+
+async def _run_prepare(job_id: str, prepare_provider: PrepareProvider) -> None:
+    try:
+        await prepare_provider()
+    except Exception as exc:
+        logger.warning("job_prepare_failed job_id=%s error=%s", job_id, exc)
 
 
 async def _monitor_progress(job_id: str, progress_provider: ProgressProvider) -> None:
