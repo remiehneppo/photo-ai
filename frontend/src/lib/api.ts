@@ -336,3 +336,21 @@ export function upscaleBatch(payload: { images: File[]; mode?: string }) {
   return request<{ job_id: string; status: string }>("/api/upscale/batch", { method: "POST", body: fd });
 }
 
+export function backgroundSegment(payload: { image: File; point_x: number; point_y: number; point_label?: number }) {
+  const fd = new FormData();
+  fd.append("image", payload.image);
+  fd.append("point_x", String(payload.point_x));
+  fd.append("point_y", String(payload.point_y));
+  fd.append("point_label", String(payload.point_label ?? 1));
+  return request<{ mask_b64: string }>("/api/background/segment", { method: "POST", body: fd });
+}
+
+export function backgroundReplace(payload: { image: File; mask_b64: string; background_prompt: string; style?: string }) {
+  const fd = new FormData();
+  fd.append("image", payload.image);
+  fd.append("mask_b64", payload.mask_b64);
+  fd.append("background_prompt", payload.background_prompt);
+  fd.append("style", payload.style ?? "realistic");
+  return request<{ job_id: string; status: string }>("/api/background/replace", { method: "POST", body: fd });
+}
+

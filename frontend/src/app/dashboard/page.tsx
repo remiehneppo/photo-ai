@@ -13,15 +13,15 @@ import { PromptInput } from "@/components/PromptInput";
 import { StyleSelector } from "@/components/StyleSelector";
 import { PromptSuggestions } from "@/components/PromptSuggestions";
 import { clearToken, getToken } from "@/lib/auth";
-import { createVariations, deleteJob, depthGuide, editImage, enhancePrompt, faceRestoreImage, generateImage, generateImageWithReference, getCapabilities, getSuggestions, getStyles, imageUrl, inpaintImage, interrogateImage, listJobs, me, outpaintImage, poseControl, restorePhoto, sharpenImage, sketchToPhoto, upscaleImage } from "@/lib/api";
+import { backgroundReplace, backgroundSegment, createVariations, deleteJob, depthGuide, editImage, enhancePrompt, faceRestoreImage, generateImage, generateImageWithReference, getCapabilities, getSuggestions, getStyles, imageUrl, inpaintImage, interrogateImage, listJobs, me, outpaintImage, poseControl, restorePhoto, sharpenImage, sketchToPhoto, upscaleBatch, upscaleImage } from "@/lib/api";
 import type { Capabilities, ControlMode, Direction, HistoryImageTarget, ImageOut, JobDetail, Style, Suggestions, User } from "@/types";
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Brush, Clock3, Expand, ImageUp, Layers, Loader2, LogOut, PenTool, RefreshCw, SlidersHorizontal, Sparkles, Wand2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, MouseEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Toaster, toast } from "sonner";
 
-type Tab = "generate" | "edit" | "inpaint" | "upscale" | "sharpen" | "outpaint" | "face_restore" | "variations" | "sketch" | "pose" | "depth" | "restore" | "history";
+type Tab = "generate" | "edit" | "inpaint" | "upscale" | "batch_upscale" | "sharpen" | "outpaint" | "face_restore" | "variations" | "sketch" | "pose" | "depth" | "restore" | "background" | "history";
 type HistoryImageSeed = { target: HistoryImageTarget; file: File };
 
 const fallbackStyles = ["realistic", "anime", "advertisement", "portrait", "artistic", "natural"].map((style) => ({
@@ -37,6 +37,7 @@ const tabs: Array<{ id: Tab; label: string; icon: ReactNode }> = [
   { id: "edit", label: "Edit", icon: <Brush className="h-4 w-4" /> },
   { id: "inpaint", label: "Inpaint", icon: <PenTool className="h-4 w-4" /> },
   { id: "upscale", label: "Upscale", icon: <ImageUp className="h-4 w-4" /> },
+  { id: "batch_upscale", label: "Batch Upscale", icon: <ImageUp className="h-4 w-4" /> },
   { id: "sharpen", label: "Sharpen", icon: <SlidersHorizontal className="h-4 w-4" /> },
   { id: "outpaint", label: "Expand", icon: <Expand className="h-4 w-4" /> },
   { id: "face_restore", label: "Face Restore", icon: <Wand2 className="h-4 w-4" /> },
@@ -45,6 +46,7 @@ const tabs: Array<{ id: Tab; label: string; icon: ReactNode }> = [
   { id: "pose", label: "Pose Control", icon: <Wand2 className="h-4 w-4" /> },
   { id: "depth", label: "Depth Guide", icon: <Layers className="h-4 w-4" /> },
   { id: "restore", label: "Restore Photo", icon: <RefreshCw className="h-4 w-4" /> },
+  { id: "background", label: "Background", icon: <Layers className="h-4 w-4" /> },
   { id: "history", label: "History", icon: <Clock3 className="h-4 w-4" /> }
 ];
 
@@ -127,6 +129,7 @@ export default function DashboardPage() {
           {tab === "edit" && <EditTab capabilities={capabilities} styles={styles} historyImageSeed={historyImageSeed} suggestions={suggestions} />}
           {tab === "inpaint" && <InpaintTab styles={styles} historyImageSeed={historyImageSeed} suggestions={suggestions} />}
           {tab === "upscale" && <UpscaleTab historyImageSeed={historyImageSeed} capabilities={capabilities} />}
+          {tab === "batch_upscale" && <BatchUpscaleTab />}
           {tab === "sharpen" && <SharpenTab historyImageSeed={historyImageSeed} />}
           {tab === "outpaint" && <OutpaintTab capabilities={capabilities} styles={styles} historyImageSeed={historyImageSeed} suggestions={suggestions} />}
           {tab === "face_restore" && <FaceRestoreTab />}
@@ -135,6 +138,7 @@ export default function DashboardPage() {
           {tab === "pose" && <PoseControlTab styles={styles} />}
           {tab === "depth" && <DepthGuideTab styles={styles} />}
           {tab === "restore" && <RestorePhotoTab />}
+          {tab === "background" && <BackgroundTab styles={styles} capabilities={capabilities} />}
           {tab === "history" && <HistoryTab onUseImage={useHistoryImage} />}
         </section>
       </div>
@@ -885,6 +889,13 @@ function HistoryTab({ onUseImage }: { onUseImage: (target: HistoryImageTarget, f
     { value: "upscale", label: "Upscale" },
     { value: "sharpen", label: "Sharpen" },
     { value: "outpaint", label: "Expand" },
+    { value: "face_restore", label: "Face Restore" },
+    { value: "variations", label: "Variations" },
+    { value: "sketch_to_photo", label: "Sketch" },
+    { value: "pose_control", label: "Pose" },
+    { value: "depth_guide", label: "Depth" },
+    { value: "restore", label: "Restore" },
+    { value: "background", label: "Background" },
   ];
 
   async function removeJob(job: JobDetail) {
@@ -1330,6 +1341,192 @@ function RestorePhotoTab() {
       <div className="mt-5 grid gap-4">
         <JobStatus jobId={jobId} onDone={setResult} />
         <ImageResult job={result} />
+      </div>
+    </Panel>
+  );
+}
+
+function BatchUpscaleTab() {
+  const [files, setFiles] = useState<File[]>([]);
+  const [mode, setMode] = useState("default");
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [result, setResult] = useState<JobDetail | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const selected = Array.from(event.target.files ?? []);
+    if (selected.length > 10) {
+      setError("Maximum 10 images per batch");
+      return;
+    }
+    setFiles(selected);
+    setError("");
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (files.length === 0) return;
+    setError(""); setLoading(true); setResult(null);
+    try {
+      const job = await upscaleBatch({ images: files, mode });
+      setJobId(job.job_id);
+      toast.success("Batch upscale started!");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Could not start batch upscale";
+      setError(msg);
+      toast.error(msg);
+    } finally { setLoading(false); }
+  }
+
+  return (
+    <Panel title="Batch Upscale">
+      <p className="mb-4 text-sm text-muted">Upscale up to 10 images at once.</p>
+      <form onSubmit={submit} className="grid gap-4">
+        <div>
+          <label className="mb-1.5 block text-sm font-semibold text-ink">Images (up to 10)</label>
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={handleFileChange}
+            className="focus-ring w-full rounded-md border border-line bg-white px-3 py-2 text-sm"
+          />
+          {files.length > 0 && <p className="mt-1 text-xs text-muted">{files.length} image(s) selected</p>}
+        </div>
+        <select className="focus-ring h-11 rounded-md border border-line bg-white px-3" value={mode} onChange={(e) => setMode(e.target.value)}>
+          <option value="default">Default 4x</option>
+          <option value="face_restore">Face restore</option>
+          <option value="anime">Anime</option>
+        </select>
+        {error && <p className="text-sm text-danger">{error}</p>}
+        <ActionButton disabled={loading || files.length === 0} icon={<ImageUp className="h-4 w-4" />}>
+          {loading ? "Starting..." : `Upscale ${files.length > 0 ? files.length : ""} image(s)`}
+        </ActionButton>
+      </form>
+      <div className="mt-5 grid gap-4">
+        <JobStatus jobId={jobId} onDone={(job) => { setResult(job); if (job) toast.success("Batch upscale complete!"); }} />
+        <ImageResult job={result} />
+      </div>
+    </Panel>
+  );
+}
+
+function BackgroundTab({ styles, capabilities }: { styles: typeof fallbackStyles; capabilities: Capabilities | null }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [style, setStyle] = useState("realistic");
+  const [backgroundPrompt, setBackgroundPrompt] = useState("");
+  const [clickPoint, setClickPoint] = useState<{ x: number; y: number; label: number } | null>(null);
+  const [maskB64, setMaskB64] = useState<string | null>(null);
+  const [segmenting, setSegmenting] = useState(false);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [result, setResult] = useState<JobDetail | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const samAvailable = capabilities?.sam_available ?? false;
+
+  function handleImageClick(event: MouseEvent<HTMLImageElement>) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const naturalW = event.currentTarget.naturalWidth;
+    const naturalH = event.currentTarget.naturalHeight;
+    const scaleX = naturalW / rect.width;
+    const scaleY = naturalH / rect.height;
+    const x = (event.clientX - rect.left) * scaleX;
+    const y = (event.clientY - rect.top) * scaleY;
+    setClickPoint({ x, y, label: 1 });
+    setMaskB64(null);
+  }
+
+  async function handleSegment() {
+    if (!file || !clickPoint) return;
+    setSegmenting(true);
+    setError("");
+    try {
+      const result = await backgroundSegment({ image: file, point_x: clickPoint.x, point_y: clickPoint.y, point_label: clickPoint.label });
+      setMaskB64(result.mask_b64);
+      toast.success("Subject segmented! Now enter background description.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not segment image");
+      toast.error("Segmentation failed");
+    } finally { setSegmenting(false); }
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!file || !maskB64 || !backgroundPrompt) return;
+    setError(""); setLoading(true); setResult(null);
+    try {
+      const job = await backgroundReplace({ image: file, mask_b64: maskB64, background_prompt: backgroundPrompt, style });
+      setJobId(job.job_id);
+      toast.success("Background replacement started!");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Could not replace background";
+      setError(msg);
+      toast.error(msg);
+    } finally { setLoading(false); }
+  }
+
+  const previewUrl = file ? URL.createObjectURL(file) : null;
+
+  return (
+    <Panel title="Background Remove & Replace">
+      {!samAvailable && (
+        <div className="mb-4 rounded-md border border-line bg-panel px-4 py-2 text-sm text-ink">
+          ⚠️ SAM (inpaint-anything) extension is not available in A1111. This feature requires SAM.
+        </div>
+      )}
+      <p className="mb-4 text-sm text-muted">Upload an image, click on the subject to segment it, then describe the new background.</p>
+      <div className="grid gap-4">
+        <ImageUpload file={file} onChange={(f) => { setFile(f); setClickPoint(null); setMaskB64(null); }} />
+        {previewUrl && (
+          <div ref={previewRef}>
+            <p className="mb-1.5 text-sm font-semibold text-ink">Click on the subject to select it</p>
+            <div className="relative inline-block w-full overflow-hidden rounded-md border border-line">
+              <img
+                src={previewUrl}
+                alt="Preview"
+                className="w-full cursor-crosshair object-contain"
+                onClick={handleImageClick}
+              />
+              {clickPoint && (
+                <div
+                  className="pointer-events-none absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-accent"
+                  style={{ left: `${(clickPoint.x / (previewRef.current?.querySelector("img")?.naturalWidth ?? 1)) * 100}%`, top: `${(clickPoint.y / (previewRef.current?.querySelector("img")?.naturalHeight ?? 1)) * 100}%` }}
+                />
+              )}
+            </div>
+            {clickPoint && !maskB64 && (
+              <button
+                type="button"
+                onClick={handleSegment}
+                disabled={segmenting}
+                className="focus-ring mt-2 inline-flex h-9 items-center gap-2 rounded-md border border-line bg-white px-4 text-sm font-semibold hover:bg-panel disabled:opacity-60"
+              >
+                {segmenting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+                {segmenting ? "Segmenting..." : "Segment Subject"}
+              </button>
+            )}
+            {maskB64 && (
+              <div className="mt-2 flex items-center gap-2 rounded-md border border-accent/30 bg-accent/5 px-3 py-2 text-sm">
+                <span className="text-accent">✓</span>
+                <span>Subject segmented. Describe the new background below.</span>
+              </div>
+            )}
+          </div>
+        )}
+        <form onSubmit={submit} className="grid gap-4">
+          <StyleSelector styles={styles} value={style} onChange={setStyle} />
+          <PromptInput value={backgroundPrompt} onChange={setBackgroundPrompt} placeholder="Describe the new background (e.g. 'sunset beach', 'studio white background')..." />
+          {error && <p className="text-sm text-danger">{error}</p>}
+          <ActionButton disabled={loading || !file || !maskB64 || !backgroundPrompt.trim()} icon={<Layers className="h-4 w-4" />}>
+            {loading ? "Starting..." : "Replace Background"}
+          </ActionButton>
+        </form>
+        <div className="grid gap-4">
+          <JobStatus jobId={jobId} onDone={(job) => { setResult(job); if (job) toast.success("Background replaced!"); }} />
+          <ImageResult job={result} />
+        </div>
       </div>
     </Panel>
   );
