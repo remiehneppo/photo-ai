@@ -245,3 +245,137 @@ Lý do:
 - A/B/C tạo nền tảng kỹ thuật cho các workflow sau.
 - Detail Upscale tận dụng ControlNet Tile sau khi ControlNet đã ổn.
 - Object/Product cần SAM và nhiều xử lý mask hơn, nên để sau.
+
+---
+
+## Phase G – Generation Controls (tham khảo yeri.ai)
+
+> Mục tiêu: Bổ sung các control chi tiết mà yeri.ai có, còn thiếu trong dashboard hiện tại.
+
+### G1. Aspect Ratio / Resolution Selector
+
+- **Backend**: Thêm optional `width`, `height` (hoặc `aspect_ratio` enum) vào `GenerateRequest` & `/api/edit`.
+  Ánh xạ preset: `"1:1"→512×512`, `"4:3"→768×576`, `"3:4"→576×768`, `"16:9"→912×512`, `"9:16"→512×912`, `"3:2"→768×512`, `"2:3"→512×768`.
+  Override preset width/height nếu user chọn.
+- **Frontend**: Component `AspectRatioSelector` (icon grid buttons) trong Generate & Edit tab.
+
+### G2. Negative Prompt
+
+- **Backend**: Thêm `negative_prompt: Optional[str]` vào request. Append vào `preset["base_negative"]`.
+- **Frontend**: Textarea "Negative prompt" (collapsible hoặc luôn hiện).
+
+### G3. Advanced Parameters (collapsible panel)
+
+- **Backend**: Thêm optional `steps`, `cfg_scale`, `sampler_name` override vào generate/edit.
+  Lấy danh sách sampler từ A1111 `/sdapi/v1/samplers` qua `/api/capabilities`.
+- **Frontend**: `<AdvancedPanel>` collapse – steps slider (10–50), CFG slider (1–20), sampler dropdown.
+
+### G4. Batch Generation (N images)
+
+- **Backend**: Thêm `batch_count: int = 1` (max 4). Lặp N lần hoặc dùng `n_iter` trong 1 job.
+  Lưu nhiều output images vào job.
+- **Frontend**: BatchCountSelector (1/2/4 buttons). ImageResult đã grid-ready.
+
+---
+
+## Phase H – Model & LoRA Control
+
+### H1. Checkpoint Selector
+
+- **Backend**: `/api/capabilities` đã trả về `checkpoints[]`. Thêm `checkpoint: Optional[str]`
+  vào generate/edit request, bỏ qua `resolve_checkpoint` khi user chỉ định.
+- **Frontend**: Dropdown checkpoint trong Generate/Edit tab (hidden nếu chỉ có 1 model).
+
+### H2. LoRA Selector
+
+- **Backend**: Endpoint mới `GET /api/loras` → gọi A1111 `/sdapi/v1/loras`. Thêm `loras: list[{name, weight}]`
+  vào generate request. Inject `<lora:name:weight>` vào prompt.
+- **Frontend**: `LoraSelector` component – multi-select với weight slider cho mỗi LoRA.
+
+### H3. Hi-Res Fix (txt2img)
+
+- **Backend**: Thêm optional `enable_hr: bool`, `hr_scale: float`, `hr_upscaler: str` vào generate.
+  Thêm vào A1111 payload khi enabled.
+- **Frontend**: Toggle "Hi-Res Fix" + scale selector (1.5x / 2x) trong Advanced panel.
+
+---
+
+## Phase I – Tính năng mới (yeri.ai inspired)
+
+### I1. Background Removal Tab (UI)
+
+- Backend router `/api/background` đã hoàn chỉnh (SAM segment + inpaint).
+- **Frontend only**: Thêm tab "Background" vào dashboard. Luồng: upload → click để chọn subject
+  (point-based SAM) → preview mask → remove/replace background với prompt.
+
+### I2. Prompt Enhancer
+
+- **Backend**: Endpoint `POST /api/enhance-prompt` nhận `{prompt, style}` → làm giàu prompt
+  bằng quality tags, style keywords từ preset.
+- **Frontend**: Button "✨ Enhance" bên cạnh PromptInput trong Generate tab.
+
+### I3. Image Tiling (Seamless Texture)
+
+- **Backend**: Thêm `tiling: bool = False` vào generate request → thêm `"tiling": True` vào A1111 payload.
+- **Frontend**: Checkbox "Seamless tiling" trong Advanced panel.
+
+### I4. Upscaler Selector
+
+- **Backend**: `/api/capabilities` đã trả về `upscalers[]`. Thêm `upscaler: Optional[str]`
+  vào upscale request thay vì dùng mode string cố định.
+- **Frontend**: Dropdown upscaler thực từ capabilities thay vì hardcode option.
+
+---
+
+## Phase J – UX Polish (yeri.ai style)
+
+### J1. Style Selector Thumbnails
+
+- **Frontend**: Thêm thumbnail URL vào `StyleOption` type. Hiển thị preview ảnh nhỏ trong
+  StyleSelector. Ảnh thumbnail lưu trong `/public/styles/`.
+
+### J2. Dashboard Layout – 2-panel
+
+- **Frontend**: Trên màn hình lớn (≥1280px), chia layout: left panel (controls, fixed 380px)
+  + right panel (kết quả, chiếm phần còn lại). Hiện tại là stacked form → result.
+
+### J3. Image Lightbox
+
+- **Frontend**: Click vào ảnh output → mở lightbox full-size với navigation, download, copy URL.
+
+### J4. Toast Notifications
+
+- **Frontend**: Replace inline `<p className="text-danger">` bằng toast system (ví dụ `sonner`).
+  Success toast khi job done, error toast khi fail.
+
+### J5. History Filter theo Feature
+
+- **Frontend**: Thêm filter theo feature (generate/edit/inpaint/...) vào History tab.
+- **Backend**: Thêm `feature` query param vào `GET /api/jobs`.
+
+---
+
+## Phase K – Infrastructure
+
+### K1. Caching Capabilities
+
+- **Backend**: Cache kết quả `/api/capabilities` 30s để tránh gọi A1111 mỗi request.
+
+### K2. Docker Compose nâng cấp
+
+- Thêm `restart: unless-stopped` cho backend service.
+- Thêm health check cho A1111 container.
+
+---
+
+## Thứ tự ưu tiên – Phase G→K
+
+1. G1 Aspect Ratio + G2 Negative Prompt + G3 Advanced Params (1 sprint)
+2. G4 Batch Generation
+3. I1 Background Tab (backend đã sẵn)
+4. H1 Checkpoint Selector
+5. J2 Layout 2-panel + J3 Lightbox + J4 Toast
+6. H2 LoRA Selector + H3 Hi-Res Fix
+7. I2 Prompt Enhancer + I3 Tiling + I4 Upscaler Selector
+8. J1 Style Thumbnails + J5 History Filter
+9. K1/K2 Infrastructure
