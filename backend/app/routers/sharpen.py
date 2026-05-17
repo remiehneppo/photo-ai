@@ -1,5 +1,4 @@
 import io
-import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from PIL import Image as PILImage
@@ -7,13 +6,11 @@ from PIL import ImageFilter
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.database import SessionLocal, get_db
-from app.models.image import Image
-from app.models.job import Job
+from app.database import get_db
 from app.models.user import User
 from app.services.auth_service import get_current_user
-from app.services.job_service import run_job, update_job_progress
-from app.services.storage_service import save_output, save_upload
+from app.services.job_service import create_job, run_job, save_job_images, update_job_progress
+from app.services.storage_service import save_upload
 from app.services.upload_service import read_image_upload
 
 router = APIRouter(prefix="/api/sharpen", tags=["sharpen"])
@@ -44,20 +41,14 @@ async def sharpen_image(
     image_bytes = await read_image_upload(image)
     file_path, filename = await save_upload(image_bytes)
 
-    job = Job(
-        id=str(uuid.uuid4()),
+    job = create_job(
+        db,
         user_id=current_user.id,
         feature="sharpen",
         style=mode,
-        status="pending",
-        progress_percent=0,
-        current_step=0,
         total_steps=3,
         estimated_seconds=5,
-        progress_label="Queued",
     )
-    db.add(job)
-    db.commit()
     job_id = job.id
     user_id = current_user.id
     preset = SHARPEN_PRESETS[mode]
@@ -65,7 +56,6 @@ async def sharpen_image(
     async def task():
         update_job_progress(job_id, progress_percent=20, current_step=1, progress_label="Loading image")
         img = PILImage.open(io.BytesIO(image_bytes))
-        output_format = "PNG"
         if img.mode not in {"RGB", "RGBA"}:
             img = img.convert("RGB")
 
@@ -79,17 +69,9 @@ async def sharpen_image(
         )
 
         buf = io.BytesIO()
-        sharpened.save(buf, format=output_format)
-        out_path, out_filename = await save_output(buf.getvalue())
-
+        sharpened.save(buf, format="PNG")
         update_job_progress(job_id, progress_percent=85, current_step=3, progress_label="Saving")
-        db2 = SessionLocal()
-        try:
-            db2.add(Image(id=str(uuid.uuid4()), job_id=job_id, user_id=user_id, type="input", file_path=file_path, filename=filename))
-            db2.add(Image(id=str(uuid.uuid4()), job_id=job_id, user_id=user_id, type="output", file_path=out_path, filename=out_filename))
-            db2.commit()
-        finally:
-            db2.close()
+        await save_job_images(job_id, user_id, [buf.getvalue()], input_file_path=file_path, input_filename=filename)
 
     background_tasks.add_task(run_job, job_id, task)
     return JobResponse(job_id=job_id, status="pending")

@@ -30,6 +30,18 @@ CONTROLNET_MODES = {
         "threshold_a": 80,
         "threshold_b": 180,
     },
+    "scribble": {
+        "label": "Scribble / Sketch",
+        "module": "scribble_hed",
+        "model_keyword": "scribble",
+        "processor_res": 512,
+    },
+    "lineart": {
+        "label": "Lineart / Anime",
+        "module": "lineart_anime",
+        "model_keyword": "lineart",
+        "processor_res": 512,
+    },
 }
 
 

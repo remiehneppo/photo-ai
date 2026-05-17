@@ -62,6 +62,11 @@ export type JobDetail = {
   images: ImageOut[];
 };
 
+export type JobListResponse = {
+  total: number;
+  items: JobDetail[];
+};
+
 export type ApiError = {
   detail?: string;
 };

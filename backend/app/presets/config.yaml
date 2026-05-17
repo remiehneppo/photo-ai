@@ -71,6 +71,66 @@ presets:
       base_positive: "(masterpiece, best quality:1.2), photorealistic, natural skin texture, soft golden hour lighting, detailed eyes, sharp focus, bokeh, depth of field, upper body, high resolution"
       base_negative: "(worst quality, low quality:1.4), nsfw, bad anatomy, bad hands, extra fingers, cloned face, text, signature, watermark, blurry, deformed, cartoon, anime, jpeg artifacts, cropped"
 
+    sketch:
+      model: v1-5-pruned-emaonly
+      steps: 30
+      cfg_scale: 7.5
+      sampler_name: DPM++ 2M Karras
+      width: 768
+      height: 768
+      base_positive: "(masterpiece, best quality:1.2), pencil sketch, charcoal drawing, black and white, fine line art, detailed crosshatching, artist sketchbook, hand-drawn"
+      base_negative: "(worst quality, low quality:1.4), nsfw, color, painted, photograph, realistic, 3d render, blurry, ugly, duplicate"
+
+    vintage:
+      model: realismIllustriousBy_v55FP16
+      steps: 30
+      cfg_scale: 7
+      sampler_name: DPM++ 2M Karras
+      width: 768
+      height: 1024
+      base_positive: "(masterpiece, best quality:1.2), vintage film photography, retro aesthetic, desaturated colors, film grain, vignette, faded tones, analog warmth, nostalgic"
+      base_negative: "(worst quality, low quality:1.4), nsfw, digital, sharp, oversaturated, modern, text, watermark, blurry, deformed"
+
+    noir:
+      model: v1-5-pruned-emaonly
+      steps: 30
+      cfg_scale: 7.5
+      sampler_name: DPM++ 2M Karras
+      width: 768
+      height: 1024
+      base_positive: "(masterpiece, best quality:1.2), film noir, black and white photography, high contrast, dramatic shadows, chiaroscuro lighting, cinematic, moody atmosphere, sharp"
+      base_negative: "(worst quality, low quality:1.4), nsfw, color, flat lighting, low contrast, blurry, text, watermark, deformed, ugly"
+
+    hdr:
+      model: realismIllustriousBy_v55FP16
+      steps: 30
+      cfg_scale: 7
+      sampler_name: DPM++ 2M Karras
+      width: 768
+      height: 1024
+      base_positive: "(masterpiece, best quality:1.2), HDR photography, high dynamic range, vivid saturated colors, sharp, ultra-detailed, dramatic lighting, crisp edges, photorealistic"
+      base_negative: "(worst quality, low quality:1.4), nsfw, flat, low contrast, blurry, grainy, text, watermark, deformed, washed out"
+
+    watercolor:
+      model: v1-5-pruned-emaonly
+      steps: 30
+      cfg_scale: 7.5
+      sampler_name: DPM++ 2M Karras
+      width: 768
+      height: 768
+      base_positive: "(masterpiece, best quality:1.2), watercolor painting, soft washes, wet on wet technique, delicate brush strokes, pastel tones, artistic, paper texture, translucent colors"
+      base_negative: "(worst quality, low quality:1.4), nsfw, photograph, 3d render, digital art, sharp, highly detailed, oil, acrylic, blurry, ugly, deformed"
+
+    oil_painting:
+      model: v1-5-pruned-emaonly
+      steps: 30
+      cfg_scale: 7.5
+      sampler_name: DPM++ 2M Karras
+      width: 768
+      height: 768
+      base_positive: "(masterpiece, best quality:1.2), oil painting, thick impasto brushstrokes, classical art, canvas texture, rich colors, detailed, fine art, museum quality, painterly"
+      base_negative: "(worst quality, low quality:1.4), nsfw, photograph, digital, sketch, watercolor, blurry, ugly, deformed, text, watermark"
+
   img2img:
     realistic:
       model: realismIllustriousBy_v55FP16
@@ -126,6 +186,96 @@ presets:
       base_positive: "(masterpiece, best quality:1.2), photorealistic, natural skin texture, soft lighting, detailed eyes, sharp focus, depth of field"
       base_negative: "(worst quality, low quality:1.4), nsfw, bad anatomy, bad hands, extra fingers, cloned face, text, watermark, blurry, deformed, cartoon, anime"
 
+    sketch:
+      model: v1-5-pruned-emaonly
+      denoising_strength: 0.65
+      steps: 30
+      cfg_scale: 7.5
+      sampler_name: DPM++ 2M Karras
+      base_positive: "(masterpiece, best quality:1.2), pencil sketch, charcoal drawing, black and white, fine line art, detailed crosshatching, hand-drawn, artist sketchbook"
+      base_negative: "(worst quality, low quality:1.4), nsfw, color, painted, photograph, realistic, blurry, ugly, duplicate"
+
+    vintage:
+      model: realismIllustriousBy_v55FP16
+      denoising_strength: 0.5
+      steps: 30
+      cfg_scale: 7
+      sampler_name: DPM++ 2M Karras
+      base_positive: "(masterpiece, best quality:1.2), vintage film photography, retro aesthetic, desaturated colors, film grain, vignette, faded tones, nostalgic"
+      base_negative: "(worst quality, low quality:1.4), nsfw, digital, sharp, oversaturated, modern, text, watermark, blurry, deformed"
+
+    noir:
+      model: v1-5-pruned-emaonly
+      denoising_strength: 0.6
+      steps: 30
+      cfg_scale: 7.5
+      sampler_name: DPM++ 2M Karras
+      base_positive: "(masterpiece, best quality:1.2), film noir, black and white, high contrast, dramatic shadows, chiaroscuro lighting, cinematic, moody atmosphere"
+      base_negative: "(worst quality, low quality:1.4), nsfw, color, flat lighting, blurry, text, watermark, deformed"
+
+    hdr:
+      model: realismIllustriousBy_v55FP16
+      denoising_strength: 0.5
+      steps: 30
+      cfg_scale: 7
+      sampler_name: DPM++ 2M Karras
+      base_positive: "(masterpiece, best quality:1.2), HDR photography, high dynamic range, vivid saturated colors, sharp, ultra-detailed, dramatic lighting, photorealistic"
+      base_negative: "(worst quality, low quality:1.4), nsfw, flat, low contrast, blurry, grainy, text, watermark, deformed"
+
+    watercolor:
+      model: v1-5-pruned-emaonly
+      denoising_strength: 0.65
+      steps: 30
+      cfg_scale: 7.5
+      sampler_name: DPM++ 2M Karras
+      base_positive: "(masterpiece, best quality:1.2), watercolor painting, soft washes, delicate brush strokes, pastel tones, artistic, paper texture, translucent colors"
+      base_negative: "(worst quality, low quality:1.4), nsfw, photograph, 3d render, sharp, oil, acrylic, blurry, ugly, deformed"
+
+    oil_painting:
+      model: v1-5-pruned-emaonly
+      denoising_strength: 0.65
+      steps: 30
+      cfg_scale: 7.5
+      sampler_name: DPM++ 2M Karras
+      base_positive: "(masterpiece, best quality:1.2), oil painting, thick impasto brushstrokes, classical art, canvas texture, rich colors, fine art, painterly"
+      base_negative: "(worst quality, low quality:1.4), nsfw, photograph, digital, sketch, watercolor, blurry, ugly, deformed, text, watermark"
+
+    golden_hour:
+      model: realismIllustriousBy_v55FP16
+      denoising_strength: 0.45
+      steps: 30
+      cfg_scale: 7
+      sampler_name: DPM++ 2M Karras
+      base_positive: "(masterpiece, best quality:1.2), golden hour photography, warm amber tones, soft sunset glow, long shadows, romantic atmosphere, photorealistic"
+      base_negative: "(worst quality, low quality:1.4), nsfw, cold tones, overcast, flat lighting, blurry, text, watermark, deformed"
+
+    moody_dark:
+      model: v1-5-pruned-emaonly
+      denoising_strength: 0.5
+      steps: 30
+      cfg_scale: 7.5
+      sampler_name: DPM++ 2M Karras
+      base_positive: "(masterpiece, best quality:1.2), dark moody atmosphere, cinematic, desaturated, deep shadows, low key lighting, dramatic, artistic"
+      base_negative: "(worst quality, low quality:1.4), nsfw, bright, colorful, cheerful, flat, blurry, text, watermark, deformed"
+
+    vibrant:
+      model: realismIllustriousBy_v55FP16
+      denoising_strength: 0.45
+      steps: 30
+      cfg_scale: 7
+      sampler_name: DPM++ 2M Karras
+      base_positive: "(masterpiece, best quality:1.2), vibrant vivid colors, high saturation, dynamic, energetic, sharp, photorealistic, ultra-detailed"
+      base_negative: "(worst quality, low quality:1.4), nsfw, desaturated, muted, flat, blurry, text, watermark, deformed"
+
+    cool_blue:
+      model: realismIllustriousBy_v55FP16
+      denoising_strength: 0.45
+      steps: 30
+      cfg_scale: 7
+      sampler_name: DPM++ 2M Karras
+      base_positive: "(masterpiece, best quality:1.2), cool blue tones, overcast sky, urban atmosphere, crisp, photorealistic, cinematic, teal tones"
+      base_negative: "(worst quality, low quality:1.4), nsfw, warm, orange, yellow, blurry, text, watermark, deformed"
+
   upscale:
     default:
       upscaler_1: R-ESRGAN 4x+
@@ -145,6 +295,39 @@ presets:
       upscaling_resize: 4
       gfpgan_visibility: 0.0
       codeformer_visibility: 0.0
+
+  face_restore:
+    gfpgan:
+      upscaler_1: None
+      upscaling_resize: 1
+      gfpgan_visibility: 0.8
+      codeformer_visibility: 0.0
+    codeformer:
+      upscaler_1: None
+      upscaling_resize: 1
+      gfpgan_visibility: 0.0
+      codeformer_visibility: 0.8
+      codeformer_weight: 0.5
+    combined:
+      upscaler_1: None
+      upscaling_resize: 1
+      gfpgan_visibility: 0.5
+      codeformer_visibility: 0.5
+      codeformer_weight: 0.5
+
+  restore:
+    default:
+      model: realismIllustriousBy_v55FP16
+      upscaler_1: R-ESRGAN 4x+
+      upscaling_resize: 4
+      gfpgan_visibility: 0.7
+      codeformer_visibility: 0.0
+      denoising_strength: 0.3
+      steps: 25
+      cfg_scale: 7
+      sampler_name: DPM++ 2M Karras
+      base_positive: "(masterpiece, best quality:1.2), restored photograph, enhanced, sharp, clean, detailed, 4K, professional restoration"
+      base_negative: "(worst quality, low quality:1.4), nsfw, scratches, noise, grain, blur, damage, artifact, faded, sepia, deteriorated, torn"
 
   outpaint:
     realistic:

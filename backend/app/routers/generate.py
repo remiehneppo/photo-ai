@@ -1,4 +1,3 @@
-import uuid
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
@@ -6,17 +5,14 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.image import Image
-from app.models.job import Job
 from app.models.user import User
 from app.services.a1111_client import a1111
 from app.services.adetailer_service import build_adetailer_scripts, has_adetailer
 from app.services.auth_service import get_current_user
 from app.services.controlnet_service import build_controlnet_scripts, merge_alwayson_scripts
-from app.services.job_service import run_job
+from app.services.job_service import create_job, run_job, save_job_images
 from app.services.model_service import add_model_override, resolve_checkpoint
 from app.services.preset_service import available_styles, get_model_meta, get_preset, merge_prompt
-from app.services.storage_service import save_output
 from app.services.upload_service import read_image_upload
 
 router = APIRouter(prefix="/api/generate", tags=["generate"])
@@ -49,28 +45,19 @@ async def generate(
         raise HTTPException(status_code=400, detail="ADetailer is not available in A1111")
 
     preset = get_preset("txt2img", req.style)
-    job = Job(
-        id=str(uuid.uuid4()),
+    job = create_job(
+        db,
         user_id=current_user.id,
         feature="txt2img",
         style=req.style,
         user_prompt=req.prompt,
-        status="pending",
-        progress_percent=0,
-        current_step=0,
         total_steps=preset["steps"],
         estimated_seconds=90 if preset["width"] >= 1024 or preset["height"] >= 1024 else 45,
-        progress_label="Queued",
     )
-    db.add(job)
-    db.commit()
     job_id = job.id
-
     user_id = current_user.id
 
     async def task():
-        from app.database import SessionLocal
-
         checkpoint = await resolve_checkpoint(a1111, preset["model"])
         model_meta = get_model_meta(preset["model"])
         await a1111.load_checkpoint(checkpoint)
@@ -91,24 +78,7 @@ async def generate(
         payload = add_model_override(payload, checkpoint, model_meta.get("clip_skip"))
         images, seed = await a1111.txt2img(payload)
         img_bytes = a1111.decode_image(images[0])
-        file_path, filename = await save_output(img_bytes)
-        db2 = SessionLocal()
-        try:
-            image = Image(
-                id=str(uuid.uuid4()),
-                job_id=job_id,
-                user_id=user_id,
-                type="output",
-                file_path=file_path,
-                filename=filename,
-            )
-            db2.add(image)
-            job2 = db2.query(Job).filter(Job.id == job_id).first()
-            if job2 and seed is not None:
-                job2.seed = seed
-            db2.commit()
-        finally:
-            db2.close()
+        await save_job_images(job_id, user_id, [img_bytes], seed=seed)
 
     background_tasks.add_task(run_job, job_id, task, a1111.get_progress, a1111.offload_unused_models)
     return JobResponse(job_id=job_id, status="pending")
@@ -146,27 +116,19 @@ async def generate_with_reference(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     preset = get_preset("txt2img", style)
-    job = Job(
-        id=str(uuid.uuid4()),
+    job = create_job(
+        db,
         user_id=current_user.id,
         feature="txt2img",
         style=style,
         user_prompt=prompt,
-        status="pending",
-        progress_percent=0,
-        current_step=0,
         total_steps=preset["steps"],
         estimated_seconds=100 if preset["width"] >= 1024 or preset["height"] >= 1024 else 55,
-        progress_label="Queued",
     )
-    db.add(job)
-    db.commit()
     job_id = job.id
     user_id = current_user.id
 
     async def task():
-        from app.database import SessionLocal
-
         checkpoint = await resolve_checkpoint(a1111, preset["model"])
         model_meta = get_model_meta(preset["model"])
         await a1111.load_checkpoint(checkpoint)
@@ -188,24 +150,7 @@ async def generate_with_reference(
         payload = add_model_override(payload, checkpoint, model_meta.get("clip_skip"))
         images, resolved_seed = await a1111.txt2img(payload)
         img_bytes = a1111.decode_image(images[0])
-        file_path, filename = await save_output(img_bytes)
-        db2 = SessionLocal()
-        try:
-            image = Image(
-                id=str(uuid.uuid4()),
-                job_id=job_id,
-                user_id=user_id,
-                type="output",
-                file_path=file_path,
-                filename=filename,
-            )
-            db2.add(image)
-            job2 = db2.query(Job).filter(Job.id == job_id).first()
-            if job2 and resolved_seed is not None:
-                job2.seed = resolved_seed
-            db2.commit()
-        finally:
-            db2.close()
+        await save_job_images(job_id, user_id, [img_bytes], seed=resolved_seed)
 
     background_tasks.add_task(run_job, job_id, task, a1111.get_progress, a1111.offload_unused_models)
     return JobResponse(job_id=job_id, status="pending")

@@ -10,14 +10,14 @@ import { PromptInput } from "@/components/PromptInput";
 import { StyleSelector } from "@/components/StyleSelector";
 import { PromptSuggestions } from "@/components/PromptSuggestions";
 import { clearToken, getToken } from "@/lib/auth";
-import { deleteJob, editImage, generateImage, generateImageWithReference, getCapabilities, getSuggestions, getStyles, imageUrl, inpaintImage, interrogateImage, listJobs, me, outpaintImage, sharpenImage, upscaleImage } from "@/lib/api";
+import { createVariations, deleteJob, depthGuide, editImage, faceRestoreImage, generateImage, generateImageWithReference, getCapabilities, getSuggestions, getStyles, imageUrl, inpaintImage, interrogateImage, listJobs, me, outpaintImage, poseControl, restorePhoto, sharpenImage, sketchToPhoto, upscaleImage } from "@/lib/api";
 import type { Capabilities, ControlMode, Direction, HistoryImageTarget, ImageOut, JobDetail, Style, Suggestions, User } from "@/types";
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Brush, Clock3, Expand, ImageUp, Loader2, LogOut, PenTool, SlidersHorizontal, Sparkles, Wand2 } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Brush, Clock3, Expand, ImageUp, Layers, Loader2, LogOut, PenTool, RefreshCw, SlidersHorizontal, Sparkles, Wand2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
-type Tab = "generate" | "edit" | "inpaint" | "upscale" | "sharpen" | "outpaint" | "history";
+type Tab = "generate" | "edit" | "inpaint" | "upscale" | "sharpen" | "outpaint" | "face_restore" | "variations" | "sketch" | "pose" | "depth" | "restore" | "history";
 type HistoryImageSeed = { target: HistoryImageTarget; file: File };
 
 const fallbackStyles = ["realistic", "anime", "advertisement", "portrait", "artistic", "natural"].map((style) => ({
@@ -35,6 +35,12 @@ const tabs: Array<{ id: Tab; label: string; icon: ReactNode }> = [
   { id: "upscale", label: "Upscale", icon: <ImageUp className="h-4 w-4" /> },
   { id: "sharpen", label: "Sharpen", icon: <SlidersHorizontal className="h-4 w-4" /> },
   { id: "outpaint", label: "Expand", icon: <Expand className="h-4 w-4" /> },
+  { id: "face_restore", label: "Face Restore", icon: <Wand2 className="h-4 w-4" /> },
+  { id: "variations", label: "Variations", icon: <Layers className="h-4 w-4" /> },
+  { id: "sketch", label: "Sketch→Photo", icon: <RefreshCw className="h-4 w-4" /> },
+  { id: "pose", label: "Pose Control", icon: <Wand2 className="h-4 w-4" /> },
+  { id: "depth", label: "Depth Guide", icon: <Layers className="h-4 w-4" /> },
+  { id: "restore", label: "Restore Photo", icon: <RefreshCw className="h-4 w-4" /> },
   { id: "history", label: "History", icon: <Clock3 className="h-4 w-4" /> }
 ];
 
@@ -118,6 +124,12 @@ export default function DashboardPage() {
           {tab === "upscale" && <UpscaleTab historyImageSeed={historyImageSeed} />}
           {tab === "sharpen" && <SharpenTab historyImageSeed={historyImageSeed} />}
           {tab === "outpaint" && <OutpaintTab capabilities={capabilities} styles={styles} historyImageSeed={historyImageSeed} suggestions={suggestions} />}
+          {tab === "face_restore" && <FaceRestoreTab />}
+          {tab === "variations" && <VariationsTab styles={styles} />}
+          {tab === "sketch" && <SketchToPhotoTab styles={styles} />}
+          {tab === "pose" && <PoseControlTab styles={styles} />}
+          {tab === "depth" && <DepthGuideTab styles={styles} />}
+          {tab === "restore" && <RestorePhotoTab />}
           {tab === "history" && <HistoryTab onUseImage={useHistoryImage} />}
         </section>
       </div>
@@ -212,7 +224,7 @@ function GenerateTab({ capabilities, styles, suggestions }: { capabilities: Capa
       </form>
       <div className="mt-5 grid gap-4">
         <JobStatus jobId={jobId} onDone={setResult} />
-        <ImageResult job={result} />
+        <ImageResult job={result} onUseSeed={(s) => setSeed(String(s))} />
       </div>
     </Panel>
   );
@@ -308,7 +320,7 @@ function EditTab({ capabilities, styles, historyImageSeed, suggestions }: { capa
       </form>
       <div className="mt-5 grid gap-4">
         <JobStatus jobId={jobId} onDone={setResult} />
-        <ImageResult job={result} />
+        <ImageResult job={result} onUseSeed={(s) => setSeed(String(s))} />
       </div>
     </Panel>
   );
@@ -398,7 +410,7 @@ function InpaintTab({ styles, historyImageSeed, suggestions }: { styles: typeof 
       </form>
       <div className="mt-5 grid gap-4">
         <JobStatus jobId={jobId} onDone={setResult} />
-        <ImageResult job={result} />
+        <ImageResult job={result} onUseSeed={(s) => setSeed(String(s))} />
       </div>
     </Panel>
   );
@@ -628,7 +640,7 @@ function OutpaintTab({ capabilities, styles, historyImageSeed, suggestions }: { 
       </form>
       <div className="mt-5 grid gap-4">
         <JobStatus jobId={jobId} onDone={setResult} />
-        <ImageResult job={result} />
+        <ImageResult job={result} onUseSeed={(s) => setSeed(String(s))} />
       </div>
     </Panel>
   );
@@ -694,16 +706,20 @@ function DirectionSelector({ value, onChange }: { value: Direction; onChange: (d
 
 function HistoryTab({ onUseImage }: { onUseImage: (target: HistoryImageTarget, file: File) => void }) {
   const [jobs, setJobs] = useState<JobDetail[]>([]);
+  const [total, setTotal] = useState(0);
+  const [featureFilter, setFeatureFilter] = useState<string>("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [busyJobId, setBusyJobId] = useState<string | null>(null);
   const [busyImageId, setBusyImageId] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (feature?: string) => {
     setLoading(true);
     setError("");
     try {
-      setJobs(await listJobs());
+      const data = await listJobs(feature || undefined);
+      setJobs(data.items);
+      setTotal(data.total);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load history");
     } finally {
@@ -715,8 +731,11 @@ function HistoryTab({ onUseImage }: { onUseImage: (target: HistoryImageTarget, f
     let cancelled = false;
     async function loadInitial() {
       try {
-        const nextJobs = await listJobs();
-        if (!cancelled) setJobs(nextJobs);
+        const data = await listJobs();
+        if (!cancelled) {
+          setJobs(data.items);
+          setTotal(data.total);
+        }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Could not load history");
       } finally {
@@ -728,6 +747,21 @@ function HistoryTab({ onUseImage }: { onUseImage: (target: HistoryImageTarget, f
       cancelled = true;
     };
   }, []);
+
+  function changeFilter(feature: string) {
+    setFeatureFilter(feature);
+    load(feature);
+  }
+
+  const featureFilters = [
+    { value: "", label: "All" },
+    { value: "txt2img", label: "Generate" },
+    { value: "img2img", label: "Edit" },
+    { value: "inpaint", label: "Inpaint" },
+    { value: "upscale", label: "Upscale" },
+    { value: "sharpen", label: "Sharpen" },
+    { value: "outpaint", label: "Expand" },
+  ];
 
   async function removeJob(job: JobDetail) {
     if (!window.confirm("Delete this history item? This cannot be undone.")) return;
@@ -761,11 +795,25 @@ function HistoryTab({ onUseImage }: { onUseImage: (target: HistoryImageTarget, f
 
   return (
     <Panel title="History">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <p className="text-sm text-muted">{loading ? "Loading..." : `${jobs.length} jobs`}</p>
-        <ActionButton variant="secondary" onClick={load}>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted">{loading ? "Loading..." : `${total} jobs`}</p>
+        <ActionButton variant="secondary" onClick={() => load(featureFilter)}>
           Refresh
         </ActionButton>
+      </div>
+      <div className="mb-4 flex flex-wrap gap-2">
+        {featureFilters.map((f) => (
+          <button
+            key={f.value}
+            type="button"
+            onClick={() => changeFilter(f.value)}
+            className={`focus-ring rounded-md border px-3 py-1.5 text-xs font-semibold transition ${
+              featureFilter === f.value ? "border-accent bg-accent text-white" : "border-line bg-white text-ink hover:bg-panel"
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
       </div>
       {error && <p className="mb-4 text-sm text-danger">{error}</p>}
       <HistoryGrid jobs={jobs} busyJobId={busyJobId} busyImageId={busyImageId} onDelete={removeJob} onUseImage={useImage} />
@@ -888,4 +936,277 @@ function StyleSuggestionBanner({
 
 function formatSliderValue(value: number) {
   return value.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+// ─── New Feature Tabs ───────────────────────────────────────────────────────
+
+function FaceRestoreTab() {
+  const [file, setFile] = useState<File | null>(null);
+  const [mode, setMode] = useState("gfpgan");
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [result, setResult] = useState<JobDetail | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!file) return;
+    setError(""); setLoading(true); setResult(null);
+    try {
+      const job = await faceRestoreImage({ image: file, mode });
+      setJobId(job.job_id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not start face restore");
+    } finally { setLoading(false); }
+  }
+
+  return (
+    <Panel title="Face Restore">
+      <form onSubmit={submit} className="grid gap-4">
+        <ImageUpload file={file} onChange={setFile} />
+        <select className="focus-ring h-11 rounded-md border border-line bg-white px-3" value={mode} onChange={(e) => setMode(e.target.value)}>
+          <option value="gfpgan">GFPGAN (natural)</option>
+          <option value="codeformer">CodeFormer (sharp)</option>
+          <option value="combined">Combined</option>
+        </select>
+        {error && <p className="text-sm text-danger">{error}</p>}
+        <ActionButton disabled={loading || !file} icon={<Wand2 className="h-4 w-4" />}>
+          {loading ? "Starting..." : "Restore Faces"}
+        </ActionButton>
+      </form>
+      <div className="mt-5 grid gap-4">
+        <JobStatus jobId={jobId} onDone={setResult} />
+        <ImageResult job={result} />
+      </div>
+    </Panel>
+  );
+}
+
+function VariationsTab({ styles }: { styles: typeof fallbackStyles }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [style, setStyle] = useState("realistic");
+  const [prompt, setPrompt] = useState("");
+  const [strength, setStrength] = useState(0.3);
+  const [numVariations, setNumVariations] = useState(2);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [result, setResult] = useState<JobDetail | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!file) return;
+    setError(""); setLoading(true); setResult(null);
+    try {
+      const job = await createVariations({ image: file, style, prompt: prompt || undefined, denoising_strength: strength, num_variations: numVariations });
+      setJobId(job.job_id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not start variations");
+    } finally { setLoading(false); }
+  }
+
+  return (
+    <Panel title="Image Variations">
+      <form onSubmit={submit} className="grid gap-4">
+        <ImageUpload file={file} onChange={setFile} />
+        <StyleSelector styles={styles} value={style} onChange={setStyle} />
+        <PromptInput value={prompt} onChange={setPrompt} placeholder="Optional guidance prompt..." />
+        <div className="grid gap-1">
+          <label className="text-sm text-muted">Variation strength: {formatSliderValue(strength)}</label>
+          <input type="range" min="0.1" max="0.5" step="0.05" value={strength} onChange={(e) => setStrength(Number(e.target.value))} className="w-full" />
+        </div>
+        <div className="grid gap-1">
+          <label className="text-sm text-muted">Number of variations: {numVariations}</label>
+          <input type="range" min="1" max="4" step="1" value={numVariations} onChange={(e) => setNumVariations(Number(e.target.value))} className="w-full" />
+        </div>
+        {error && <p className="text-sm text-danger">{error}</p>}
+        <ActionButton disabled={loading || !file} icon={<Layers className="h-4 w-4" />}>
+          {loading ? "Starting..." : "Generate Variations"}
+        </ActionButton>
+      </form>
+      <div className="mt-5 grid gap-4">
+        <JobStatus jobId={jobId} onDone={setResult} />
+        <ImageResult job={result} />
+      </div>
+    </Panel>
+  );
+}
+
+function SketchToPhotoTab({ styles }: { styles: typeof fallbackStyles }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [prompt, setPrompt] = useState("");
+  const [style, setStyle] = useState("realistic");
+  const [cnMode, setCnMode] = useState("scribble");
+  const [weight, setWeight] = useState(0.8);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [result, setResult] = useState<JobDetail | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!file || !prompt) return;
+    setError(""); setLoading(true); setResult(null);
+    try {
+      const job = await sketchToPhoto({ image: file, prompt, style, controlnet_mode: cnMode, controlnet_weight: weight });
+      setJobId(job.job_id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not start sketch to photo");
+    } finally { setLoading(false); }
+  }
+
+  return (
+    <Panel title="Sketch → Photo">
+      <form onSubmit={submit} className="grid gap-4">
+        <ImageUpload file={file} onChange={setFile} />
+        <PromptInput value={prompt} onChange={setPrompt} placeholder="Describe the photo to generate..." />
+        <StyleSelector styles={styles} value={style} onChange={setStyle} />
+        <select className="focus-ring h-11 rounded-md border border-line bg-white px-3" value={cnMode} onChange={(e) => setCnMode(e.target.value)}>
+          <option value="scribble">Scribble (rough sketches)</option>
+          <option value="lineart">Lineart (clean line art / anime)</option>
+        </select>
+        <div className="grid gap-1">
+          <label className="text-sm text-muted">ControlNet weight: {formatSliderValue(weight)}</label>
+          <input type="range" min="0.3" max="1.5" step="0.05" value={weight} onChange={(e) => setWeight(Number(e.target.value))} className="w-full" />
+        </div>
+        {error && <p className="text-sm text-danger">{error}</p>}
+        <ActionButton disabled={loading || !file || !prompt} icon={<RefreshCw className="h-4 w-4" />}>
+          {loading ? "Starting..." : "Convert Sketch"}
+        </ActionButton>
+      </form>
+      <div className="mt-5 grid gap-4">
+        <JobStatus jobId={jobId} onDone={setResult} />
+        <ImageResult job={result} />
+      </div>
+    </Panel>
+  );
+}
+
+function PoseControlTab({ styles }: { styles: typeof fallbackStyles }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [prompt, setPrompt] = useState("");
+  const [style, setStyle] = useState("realistic");
+  const [weight, setWeight] = useState(0.8);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [result, setResult] = useState<JobDetail | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!file || !prompt) return;
+    setError(""); setLoading(true); setResult(null);
+    try {
+      const job = await poseControl({ pose_image: file, prompt, style, controlnet_weight: weight });
+      setJobId(job.job_id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not start pose control");
+    } finally { setLoading(false); }
+  }
+
+  return (
+    <Panel title="Pose Control">
+      <p className="mb-4 text-sm text-muted">Upload a reference image with the desired pose, then describe the character to generate.</p>
+      <form onSubmit={submit} className="grid gap-4">
+        <ImageUpload file={file} onChange={setFile} />
+        <PromptInput value={prompt} onChange={setPrompt} placeholder="Describe the character and scene..." />
+        <StyleSelector styles={styles} value={style} onChange={setStyle} />
+        <div className="grid gap-1">
+          <label className="text-sm text-muted">Pose adherence: {formatSliderValue(weight)}</label>
+          <input type="range" min="0.3" max="1.5" step="0.05" value={weight} onChange={(e) => setWeight(Number(e.target.value))} className="w-full" />
+        </div>
+        {error && <p className="text-sm text-danger">{error}</p>}
+        <ActionButton disabled={loading || !file || !prompt} icon={<Wand2 className="h-4 w-4" />}>
+          {loading ? "Starting..." : "Generate with Pose"}
+        </ActionButton>
+      </form>
+      <div className="mt-5 grid gap-4">
+        <JobStatus jobId={jobId} onDone={setResult} />
+        <ImageResult job={result} />
+      </div>
+    </Panel>
+  );
+}
+
+function DepthGuideTab({ styles }: { styles: typeof fallbackStyles }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [prompt, setPrompt] = useState("");
+  const [style, setStyle] = useState("realistic");
+  const [weight, setWeight] = useState(0.7);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [result, setResult] = useState<JobDetail | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!file || !prompt) return;
+    setError(""); setLoading(true); setResult(null);
+    try {
+      const job = await depthGuide({ reference_image: file, prompt, style, controlnet_weight: weight });
+      setJobId(job.job_id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not start depth guide");
+    } finally { setLoading(false); }
+  }
+
+  return (
+    <Panel title="Depth Guide">
+      <p className="mb-4 text-sm text-muted">Upload a reference image to use its spatial depth structure as guidance for generation.</p>
+      <form onSubmit={submit} className="grid gap-4">
+        <ImageUpload file={file} onChange={setFile} />
+        <PromptInput value={prompt} onChange={setPrompt} placeholder="Describe the scene to generate..." />
+        <StyleSelector styles={styles} value={style} onChange={setStyle} />
+        <div className="grid gap-1">
+          <label className="text-sm text-muted">Depth adherence: {formatSliderValue(weight)}</label>
+          <input type="range" min="0.3" max="1.5" step="0.05" value={weight} onChange={(e) => setWeight(Number(e.target.value))} className="w-full" />
+        </div>
+        {error && <p className="text-sm text-danger">{error}</p>}
+        <ActionButton disabled={loading || !file || !prompt} icon={<Layers className="h-4 w-4" />}>
+          {loading ? "Starting..." : "Generate with Depth"}
+        </ActionButton>
+      </form>
+      <div className="mt-5 grid gap-4">
+        <JobStatus jobId={jobId} onDone={setResult} />
+        <ImageResult job={result} />
+      </div>
+    </Panel>
+  );
+}
+
+function RestorePhotoTab() {
+  const [file, setFile] = useState<File | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [result, setResult] = useState<JobDetail | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!file) return;
+    setError(""); setLoading(true); setResult(null);
+    try {
+      const job = await restorePhoto({ image: file });
+      setJobId(job.job_id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not start photo restoration");
+    } finally { setLoading(false); }
+  }
+
+  return (
+    <Panel title="Restore Old Photo">
+      <p className="mb-4 text-sm text-muted">Upscale + face restore + denoise pipeline for old or damaged photos.</p>
+      <form onSubmit={submit} className="grid gap-4">
+        <ImageUpload file={file} onChange={setFile} />
+        {error && <p className="text-sm text-danger">{error}</p>}
+        <ActionButton disabled={loading || !file} icon={<RefreshCw className="h-4 w-4" />}>
+          {loading ? "Starting..." : "Restore Photo"}
+        </ActionButton>
+      </form>
+      <div className="mt-5 grid gap-4">
+        <JobStatus jobId={jobId} onDone={setResult} />
+        <ImageResult job={result} />
+      </div>
+    </Panel>
+  );
 }

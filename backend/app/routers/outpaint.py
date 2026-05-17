@@ -1,5 +1,4 @@
 import io
-import uuid
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
@@ -8,17 +7,15 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.config import OUTPAINT_MAX_PIXELS
-from app.database import SessionLocal, get_db
-from app.models.image import Image
-from app.models.job import Job
+from app.database import get_db
 from app.models.user import User
 from app.services.a1111_client import a1111
 from app.services.adetailer_service import build_adetailer_scripts, has_adetailer
 from app.services.auth_service import get_current_user
-from app.services.job_service import run_job
+from app.services.job_service import create_job, run_job, save_job_images
 from app.services.model_service import add_model_override, resolve_checkpoint
 from app.services.preset_service import available_styles, get_model_meta, get_preset, merge_prompt
-from app.services.storage_service import save_output, save_upload
+from app.services.storage_service import save_upload
 from app.services.upload_service import read_image_upload
 
 router = APIRouter(prefix="/api/outpaint", tags=["outpaint"])
@@ -32,10 +29,6 @@ class JobResponse(BaseModel):
 
 
 def expand_canvas(img_bytes: bytes, direction: str, expand_px: int, max_pixels: int = OUTPAINT_MAX_PIXELS) -> tuple[bytes, bytes]:
-    """
-    Expand the image canvas in the given direction.
-    Returns (expanded_image_bytes, mask_bytes) where white=area to fill.
-    """
     try:
         img = PILImage.open(io.BytesIO(img_bytes)).convert("RGB")
     except UnidentifiedImageError as exc:
@@ -109,21 +102,15 @@ async def outpaint_image(
     preset = get_preset("outpaint", style)
     expand_px = preset.get("expand_pixels", 256)
 
-    job = Job(
-        id=str(uuid.uuid4()),
+    job = create_job(
+        db,
         user_id=current_user.id,
         feature="outpaint",
         style=style,
         user_prompt=prompt,
-        status="pending",
-        progress_percent=0,
-        current_step=0,
         total_steps=preset["steps"],
         estimated_seconds=90 if style == "advertisement" else 50,
-        progress_label="Queued",
     )
-    db.add(job)
-    db.commit()
     job_id = job.id
     user_id = current_user.id
 
@@ -160,17 +147,7 @@ async def outpaint_image(
         payload = add_model_override(payload, checkpoint, model_meta.get("clip_skip"))
         images, resolved_seed = await a1111.img2img(payload)
         img_bytes_out = a1111.decode_image(images[0])
-        out_path, out_filename = await save_output(img_bytes_out)
-        db2 = SessionLocal()
-        try:
-            db2.add(Image(id=str(uuid.uuid4()), job_id=job_id, user_id=user_id, type="input", file_path=file_path, filename=filename))
-            db2.add(Image(id=str(uuid.uuid4()), job_id=job_id, user_id=user_id, type="output", file_path=out_path, filename=out_filename))
-            job2 = db2.query(Job).filter(Job.id == job_id).first()
-            if job2 and resolved_seed is not None:
-                job2.seed = resolved_seed
-            db2.commit()
-        finally:
-            db2.close()
+        await save_job_images(job_id, user_id, [img_bytes_out], input_file_path=file_path, input_filename=filename, seed=resolved_seed)
 
     background_tasks.add_task(run_job, job_id, task, a1111.get_progress, a1111.offload_unused_models)
     return JobResponse(job_id=job_id, status="pending")

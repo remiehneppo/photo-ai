@@ -1,7 +1,10 @@
 from datetime import datetime
-from typing import Optional
+from typing import AsyncGenerator, Optional
+import asyncio
+import json
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -11,6 +14,7 @@ from app.models.job import Job
 from app.models.user import User
 from app.services.a1111_client import a1111
 from app.services.auth_service import get_current_user
+from app.services.job_service import get_current_job_id
 from app.services.storage_service import delete_image_file, get_image_url
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
@@ -42,23 +46,27 @@ class JobDetail(BaseModel):
     images: list[ImageOut]
 
 
-@router.get("", response_model=list[JobDetail])
+class JobListResponse(BaseModel):
+    total: int
+    items: list[JobDetail]
+
+
+@router.get("", response_model=JobListResponse)
 def list_jobs(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=50),
+    feature: Optional[str] = Query(None),
 ):
-    jobs = (
-        db.query(Job)
-        .filter(Job.user_id == current_user.id)
-        .order_by(Job.created_at.desc())
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
+    query = db.query(Job).filter(Job.user_id == current_user.id)
+    if feature:
+        query = query.filter(Job.feature == feature)
+    total = query.count()
+    jobs = query.order_by(Job.created_at.desc()).offset(skip).limit(limit).all()
     images_by_job = _images_by_job(db, [job.id for job in jobs])
-    return [_build_job_detail(job, db, images_by_job.get(job.id, [])) for job in jobs]
+    items = [_build_job_detail(job, db, images_by_job.get(job.id, [])) for job in jobs]
+    return JobListResponse(total=total, items=items)
 
 
 @router.get("/{job_id}", response_model=JobDetail)
@@ -85,7 +93,10 @@ async def cancel_job(
     if job.status not in {"pending", "processing"}:
         raise HTTPException(status_code=409, detail="Only pending or processing jobs can be cancelled")
 
-    await a1111.interrupt()
+    # Only interrupt A1111 if this job is the one currently running
+    if job.status == "processing" and get_current_job_id() == job_id:
+        await a1111.interrupt()
+
     job.status = "failed"
     job.error_message = "Cancelled by user"
     job.progress_label = "Cancelled"
@@ -115,6 +126,37 @@ def delete_job(
     for file_path in file_paths:
         delete_image_file(file_path)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/{job_id}/stream")
+async def stream_job_progress(
+    job_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    job = db.query(Job).filter(Job.id == job_id, Job.user_id == current_user.id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    async def event_generator() -> AsyncGenerator[str, None]:
+        while True:
+            db.expire_all()
+            j = db.query(Job).filter(Job.id == job_id).first()
+            if j is None:
+                break
+            images = db.query(Image).filter(Image.job_id == j.id).all()
+            detail = _build_job_detail(j, db, images)
+            data = detail.model_dump(mode="json")
+            yield f"data: {json.dumps(data)}\n\n"
+            if j.status in ("done", "failed"):
+                break
+            await asyncio.sleep(1.0)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 def _build_job_detail(job: Job, db: Session, images: list[Image] | None = None) -> JobDetail:

@@ -1,7 +1,7 @@
 "use client";
 
 import { clearToken, getToken, setToken } from "@/lib/auth";
-import type { Capabilities, ControlMode, Direction, JobDetail, JobResponse, Style, Suggestions, TokenResponse, User } from "@/types";
+import type { Capabilities, ControlMode, Direction, JobDetail, JobListResponse, JobResponse, Style, Suggestions, TokenResponse, User } from "@/types";
 
 const API_PORT = process.env.NEXT_PUBLIC_API_PORT || "8000";
 
@@ -190,8 +190,9 @@ export function getJob(id: string) {
   return request<JobDetail>(`/api/jobs/${id}`);
 }
 
-export function listJobs() {
-  return request<JobDetail[]>("/api/jobs");
+export function listJobs(feature?: string) {
+  const params = feature ? `?feature=${encodeURIComponent(feature)}` : "";
+  return request<JobListResponse>(`/api/jobs${params}`);
 }
 
 export function inpaintImage(payload: {
@@ -235,3 +236,66 @@ export function deleteJob(id: string) {
 export function getSuggestions() {
   return request<Suggestions>("/api/suggestions");
 }
+
+export function faceRestoreImage(payload: { image: File; mode?: string }) {
+  const fd = new FormData();
+  fd.append("image", payload.image);
+  fd.append("mode", payload.mode ?? "gfpgan");
+  return request<{ job_id: string; status: string }>("/api/face-restore", { method: "POST", body: fd });
+}
+
+export function createVariations(payload: { image: File; style?: string; prompt?: string; denoising_strength?: number; num_variations?: number }) {
+  const fd = new FormData();
+  fd.append("image", payload.image);
+  fd.append("style", payload.style ?? "realistic");
+  if (payload.prompt) fd.append("prompt", payload.prompt);
+  fd.append("denoising_strength", String(payload.denoising_strength ?? 0.3));
+  fd.append("num_variations", String(payload.num_variations ?? 2));
+  return request<{ job_id: string; status: string }>("/api/variations", { method: "POST", body: fd });
+}
+
+export function sketchToPhoto(payload: { image: File; prompt: string; style?: string; controlnet_mode?: string; controlnet_weight?: number; seed?: number | null }) {
+  const fd = new FormData();
+  fd.append("image", payload.image);
+  fd.append("prompt", payload.prompt);
+  fd.append("style", payload.style ?? "realistic");
+  fd.append("controlnet_mode", payload.controlnet_mode ?? "scribble");
+  fd.append("controlnet_weight", String(payload.controlnet_weight ?? 0.8));
+  if (payload.seed != null) fd.append("seed", String(payload.seed));
+  return request<{ job_id: string; status: string }>("/api/sketch-to-photo", { method: "POST", body: fd });
+}
+
+export function poseControl(payload: { pose_image: File; prompt: string; style?: string; controlnet_weight?: number; seed?: number | null }) {
+  const fd = new FormData();
+  fd.append("pose_image", payload.pose_image);
+  fd.append("prompt", payload.prompt);
+  fd.append("style", payload.style ?? "realistic");
+  fd.append("controlnet_weight", String(payload.controlnet_weight ?? 0.8));
+  if (payload.seed != null) fd.append("seed", String(payload.seed));
+  return request<{ job_id: string; status: string }>("/api/pose-control", { method: "POST", body: fd });
+}
+
+export function depthGuide(payload: { reference_image: File; prompt: string; style?: string; controlnet_weight?: number; seed?: number | null }) {
+  const fd = new FormData();
+  fd.append("reference_image", payload.reference_image);
+  fd.append("prompt", payload.prompt);
+  fd.append("style", payload.style ?? "realistic");
+  fd.append("controlnet_weight", String(payload.controlnet_weight ?? 0.7));
+  if (payload.seed != null) fd.append("seed", String(payload.seed));
+  return request<{ job_id: string; status: string }>("/api/depth-guide", { method: "POST", body: fd });
+}
+
+export function restorePhoto(payload: { image: File; mode?: string }) {
+  const fd = new FormData();
+  fd.append("image", payload.image);
+  fd.append("mode", payload.mode ?? "default");
+  return request<{ job_id: string; status: string }>("/api/restore", { method: "POST", body: fd });
+}
+
+export function upscaleBatch(payload: { images: File[]; mode?: string }) {
+  const fd = new FormData();
+  for (const img of payload.images) fd.append("images", img);
+  fd.append("mode", payload.mode ?? "default");
+  return request<{ job_id: string; status: string }>("/api/upscale/batch", { method: "POST", body: fd });
+}
+

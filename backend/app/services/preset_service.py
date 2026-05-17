@@ -53,3 +53,19 @@ def available_styles(feature: str) -> list[str]:
 def available_upscale_modes() -> list[str]:
     config = _load_config()
     return list(config.get("presets", {}).get("upscale", {}).keys())
+
+
+def get_face_restore_preset(mode: str = "gfpgan") -> dict[str, Any]:
+    config = _load_config()
+    preset = config.get("presets", {}).get("face_restore", {}).get(mode)
+    if preset is None:
+        raise ValueError(f"No face_restore preset for mode='{mode}'")
+    return dict(preset)
+
+
+def get_restore_preset(mode: str = "default") -> dict[str, Any]:
+    config = _load_config()
+    preset = config.get("presets", {}).get("restore", {}).get(mode)
+    if preset is None:
+        raise ValueError(f"No restore preset for mode='{mode}'")
+    return dict(preset)

@@ -1,6 +1,7 @@
 import base64
 import json
 import logging
+import time
 from typing import Any
 
 import httpx
@@ -50,26 +51,41 @@ class A1111Client:
 
     async def txt2img(self, payload: dict[str, Any]) -> tuple[list[str], int | None]:
         """Returns list of base64-encoded images and the seed used."""
+        t0 = time.monotonic()
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             r = await client.post(f"{self.base_url}/sdapi/v1/txt2img", json=payload)
             self._raise_for_status(r, "txt2img")
             data = r.json()
+            logger.info("a1111_txt2img_done duration_ms=%d", int((time.monotonic() - t0) * 1000))
             return data["images"], _extract_seed(data)
 
     async def img2img(self, payload: dict[str, Any]) -> tuple[list[str], int | None]:
         """Returns list of base64-encoded images and the seed used."""
+        t0 = time.monotonic()
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             r = await client.post(f"{self.base_url}/sdapi/v1/img2img", json=payload)
             self._raise_for_status(r, "img2img")
             data = r.json()
+            logger.info("a1111_img2img_done duration_ms=%d", int((time.monotonic() - t0) * 1000))
             return data["images"], _extract_seed(data)
 
     async def upscale(self, payload: dict[str, Any]) -> str:
         """Returns base64-encoded image."""
+        t0 = time.monotonic()
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             r = await client.post(f"{self.base_url}/sdapi/v1/extra-single-image", json=payload)
             self._raise_for_status(r, "upscale")
+            logger.info("a1111_upscale_done duration_ms=%d", int((time.monotonic() - t0) * 1000))
             return r.json()["image"]
+
+    async def upscale_batch(self, payload: dict[str, Any]) -> list[str]:
+        """Batch upscale. Returns list of base64-encoded images."""
+        t0 = time.monotonic()
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            r = await client.post(f"{self.base_url}/sdapi/v1/extra-batch-images", json=payload)
+            self._raise_for_status(r, "upscale_batch")
+            logger.info("a1111_upscale_batch_done duration_ms=%d", int((time.monotonic() - t0) * 1000))
+            return [img["image"] for img in r.json().get("images", [])]
 
     async def interrupt(self) -> None:
         try:
@@ -133,6 +149,13 @@ class A1111Client:
                 return r.status_code == 200
         except Exception:
             return False
+
+    async def sam_predict(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Call SAM (inpaint-anything) to get segmentation masks from click points."""
+        async with httpx.AsyncClient(timeout=60) as client:
+            r = await client.post(f"{self.base_url}/sam/sam-predict", json=payload)
+            self._raise_for_status(r, "sam_predict")
+            return r.json()
 
     async def get_progress(self) -> dict[str, Any]:
         async with httpx.AsyncClient(timeout=10) as client:

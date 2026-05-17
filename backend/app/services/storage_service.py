@@ -1,8 +1,20 @@
 import os
 import uuid
 import aiofiles
+from io import BytesIO
 from pathlib import Path
+from PIL import Image as PILImage, UnidentifiedImageError
 from app.config import STORAGE_PATH
+
+_FORMAT_TO_EXT = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp"}
+
+
+def _detect_suffix(image_bytes: bytes) -> str:
+    try:
+        with PILImage.open(BytesIO(image_bytes)) as img:
+            return _FORMAT_TO_EXT.get(img.format or "", ".png")
+    except (UnidentifiedImageError, OSError):
+        return ".png"
 
 
 def _ensure_dirs():
@@ -10,9 +22,11 @@ def _ensure_dirs():
     Path(f"{STORAGE_PATH}/output").mkdir(parents=True, exist_ok=True)
 
 
-async def save_upload(image_bytes: bytes, suffix: str = ".png") -> tuple[str, str]:
+async def save_upload(image_bytes: bytes, suffix: str | None = None) -> tuple[str, str]:
     """Save uploaded image. Returns (file_path, filename)."""
     _ensure_dirs()
+    if suffix is None:
+        suffix = _detect_suffix(image_bytes)
     filename = f"{uuid.uuid4()}{suffix}"
     file_path = os.path.join(STORAGE_PATH, "input", filename)
     async with aiofiles.open(file_path, "wb") as f:

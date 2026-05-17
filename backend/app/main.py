@@ -10,15 +10,36 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
 from app.config import STORAGE_PATH
-from app.database import Base, engine
+from app.database import Base, engine, SessionLocal
 from app.logging_config import configure_logging
 from app.models import Image, Job, User
-from app.routers import auth, capabilities, edit, generate, inpaint, interrogate, jobs, outpaint, sharpen, suggestions, upscale
+from app.routers import auth, background, capabilities, depth_guide, edit, face_restore, generate, inpaint, interrogate, jobs, outpaint, pose_control, restore, sharpen, sketch_to_photo, suggestions, upscale, variations
 
 configure_logging()
 logger = logging.getLogger("photo_ai.api")
 
 Base.metadata.create_all(bind=engine)
+
+
+def _cleanup_stale_jobs() -> None:
+    """Mark pending/processing jobs as failed on startup (they can never complete)."""
+    from datetime import datetime
+    db = SessionLocal()
+    try:
+        stale = db.query(Job).filter(Job.status.in_(["pending", "processing"])).all()
+        if stale:
+            for job in stale:
+                job.status = "failed"
+                job.error_message = "Server restarted while job was running"
+                job.progress_label = "Failed"
+                job.completed_at = datetime.utcnow()
+            db.commit()
+            logger.info("startup_cleanup stale_jobs_reset=%d", len(stale))
+    finally:
+        db.close()
+
+
+_cleanup_stale_jobs()
 
 app = FastAPI(title="Photo AI API", version="1.0.0")
 
@@ -100,6 +121,13 @@ app.include_router(sharpen.router)
 app.include_router(outpaint.router)
 app.include_router(jobs.router)
 app.include_router(suggestions.router)
+app.include_router(face_restore.router)
+app.include_router(variations.router)
+app.include_router(sketch_to_photo.router)
+app.include_router(pose_control.router)
+app.include_router(depth_guide.router)
+app.include_router(restore.router)
+app.include_router(background.router)
 
 os.makedirs(f"{STORAGE_PATH}/input", exist_ok=True)
 os.makedirs(f"{STORAGE_PATH}/output", exist_ok=True)

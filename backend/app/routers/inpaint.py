@@ -1,49 +1,22 @@
-import uuid
-from io import BytesIO
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
-from PIL import Image as PILImage, UnidentifiedImageError
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.database import SessionLocal, get_db
-from app.models.image import Image
-from app.models.job import Job
+from app.database import get_db
 from app.models.user import User
 from app.services.a1111_client import a1111
 from app.services.adetailer_service import build_adetailer_scripts, has_adetailer
 from app.services.auth_service import get_current_user
-from app.services.job_service import run_job
+from app.services.image_utils import get_image_size, to_grayscale_png
+from app.services.job_service import create_job, run_job, save_job_images
 from app.services.model_service import add_model_override, resolve_checkpoint
 from app.services.preset_service import available_styles, get_model_meta, get_preset, merge_prompt
-from app.services.storage_service import save_output, save_upload
-from app.services.upload_service import read_image_upload, validate_image_bytes
+from app.services.storage_service import save_upload
+from app.services.upload_service import read_image_upload
 
 router = APIRouter(prefix="/api/inpaint", tags=["inpaint"])
-
-
-def _get_image_size(image_bytes: bytes) -> tuple[int, int]:
-    try:
-        return validate_image_bytes(image_bytes)
-    except HTTPException:
-        raise
-    except UnidentifiedImageError as exc:
-        raise HTTPException(status_code=400, detail="Uploaded image is not a valid image file") from exc
-
-
-def _ensure_png(image_bytes: bytes) -> bytes:
-    """Convert mask to RGBA PNG so A1111 reads it consistently."""
-    try:
-        with PILImage.open(BytesIO(image_bytes)) as img:
-            if img.format == "PNG" and img.mode in ("L", "RGB", "RGBA"):
-                return image_bytes
-            converted = img.convert("L")
-            out = BytesIO()
-            converted.save(out, format="PNG")
-            return out.getvalue()
-    except UnidentifiedImageError:
-        return image_bytes
 
 
 class JobResponse(BaseModel):
@@ -75,26 +48,20 @@ async def inpaint_image(
         raise HTTPException(status_code=400, detail="ADetailer is not available in A1111")
 
     image_bytes = await read_image_upload(image)
-    source_width, source_height = _get_image_size(image_bytes)
-    mask_bytes = _ensure_png(await read_image_upload(mask))
+    source_width, source_height = get_image_size(image_bytes)
+    mask_bytes = to_grayscale_png(await read_image_upload(mask))
 
     file_path, filename = await save_upload(image_bytes)
     preset = get_preset("inpaint", style)
-    job = Job(
-        id=str(uuid.uuid4()),
+    job = create_job(
+        db,
         user_id=current_user.id,
         feature="inpaint",
         style=style,
         user_prompt=prompt,
-        status="pending",
-        progress_percent=0,
-        current_step=0,
         total_steps=preset["steps"],
         estimated_seconds=50,
-        progress_label="Queued",
     )
-    db.add(job)
-    db.commit()
     job_id = job.id
     user_id = current_user.id
     b64_input = a1111.encode_image(image_bytes)
@@ -128,17 +95,7 @@ async def inpaint_image(
         payload = add_model_override(payload, checkpoint, model_meta.get("clip_skip"))
         images, resolved_seed = await a1111.img2img(payload)
         img_bytes = a1111.decode_image(images[0])
-        out_path, out_filename = await save_output(img_bytes)
-        db2 = SessionLocal()
-        try:
-            db2.add(Image(id=str(uuid.uuid4()), job_id=job_id, user_id=user_id, type="input", file_path=file_path, filename=filename))
-            db2.add(Image(id=str(uuid.uuid4()), job_id=job_id, user_id=user_id, type="output", file_path=out_path, filename=out_filename))
-            job2 = db2.query(Job).filter(Job.id == job_id).first()
-            if job2 and resolved_seed is not None:
-                job2.seed = resolved_seed
-            db2.commit()
-        finally:
-            db2.close()
+        await save_job_images(job_id, user_id, [img_bytes], input_file_path=file_path, input_filename=filename, seed=resolved_seed)
 
     background_tasks.add_task(run_job, job_id, task, a1111.get_progress, a1111.offload_unused_models)
     return JobResponse(job_id=job_id, status="pending")

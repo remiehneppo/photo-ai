@@ -6,7 +6,7 @@ import { imageUrl } from "@/lib/api";
 import type { JobDetail } from "@/types";
 import { Copy, Download } from "lucide-react";
 
-export function ImageResult({ job }: { job: JobDetail | null }) {
+export function ImageResult({ job, onUseSeed }: { job: JobDetail | null; onUseSeed?: (seed: number) => void }) {
   const outputs = job?.images.filter((image) => image.type === "output" && image.url) ?? [];
   const input = job?.images.find((image) => image.type === "input" && image.url);
 
@@ -28,7 +28,7 @@ export function ImageResult({ job }: { job: JobDetail | null }) {
           );
         })}
       </div>
-      {job.seed != null && <SeedPanel seed={job.seed} />}
+      {job.seed != null && <SeedPanel seed={job.seed} onUseSeed={onUseSeed} />}
     </div>
   );
 }
@@ -83,7 +83,7 @@ function ImagePanel({ title, src, filename }: { title: string; src: string; file
   );
 }
 
-function SeedPanel({ seed }: { seed: number }) {
+function SeedPanel({ seed, onUseSeed }: { seed: number; onUseSeed?: (seed: number) => void }) {
   const [copied, setCopied] = useState(false);
 
   async function copySeed() {
@@ -98,6 +98,11 @@ function SeedPanel({ seed }: { seed: number }) {
       <button type="button" onClick={copySeed} className="focus-ring inline-flex items-center gap-1 rounded-md border border-line px-2 py-1.5 text-xs font-semibold hover:bg-panel">
         <Copy className="h-3 w-3" /> {copied ? "Copied" : "Copy"}
       </button>
+      {onUseSeed && (
+        <button type="button" onClick={() => onUseSeed(seed)} className="focus-ring inline-flex items-center gap-1 rounded-md border border-line px-2 py-1.5 text-xs font-semibold hover:bg-panel">
+          🎲 Use seed
+        </button>
+      )}
     </div>
   );
 }

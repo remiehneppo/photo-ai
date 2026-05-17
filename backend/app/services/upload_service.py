@@ -26,7 +26,7 @@ def validate_image_bytes(image_bytes: bytes) -> tuple[int, int]:
 
     try:
         with PILImage.open(BytesIO(image_bytes)) as image:
-            image.verify()
+            image.load()  # Fully decode — raises on corrupt data
             image_format = image.format
             width, height = image.size
     except (UnidentifiedImageError, OSError, SyntaxError) as exc:
