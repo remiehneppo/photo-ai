@@ -68,8 +68,10 @@ def test_a1111_client_calls_expected_endpoints(monkeypatch):
     assert asyncio.run(client.health_check())
     asyncio.run(client.set_model("model-a"))
     asyncio.run(client.load_checkpoint("model-b"))
-    assert asyncio.run(client.txt2img({"prompt": "x"})) == ["txt"]
-    assert asyncio.run(client.img2img({"prompt": "x"})) == ["img"]
+    images, _seed = asyncio.run(client.txt2img({"prompt": "x"}))
+    assert images == ["txt"]
+    images, _seed = asyncio.run(client.img2img({"prompt": "x"}))
+    assert images == ["img"]
     assert asyncio.run(client.upscale({"image": "x"})) == "upscaled"
     asyncio.run(client.offload_unused_models())
     assert asyncio.run(client.get_progress())["progress"] == 0.5

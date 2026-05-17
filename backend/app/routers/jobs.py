@@ -59,6 +59,25 @@ def list_jobs(
     limit: int = Query(20, ge=1, le=50),
     feature: Optional[str] = Query(None),
 ):
+    # When called directly (not via HTTP), FastAPI Query defaults arrive as FieldInfo objects
+    from fastapi.params import Query as QueryType
+    if isinstance(feature, QueryType):
+        feature = None
+    if isinstance(skip, QueryType):
+        skip = 0
+    if isinstance(limit, QueryType):
+        limit = 20
+    return _list_jobs(db=db, current_user=current_user, skip=skip, limit=limit, feature=feature)
+
+
+def _list_jobs(
+    db: Session,
+    current_user: User,
+    *,
+    skip: int = 0,
+    limit: int = 20,
+    feature: str | None = None,
+) -> JobListResponse:
     query = db.query(Job).filter(Job.user_id == current_user.id)
     if feature:
         query = query.filter(Job.feature == feature)

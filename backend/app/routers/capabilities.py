@@ -1,3 +1,4 @@
+import time
 from pydantic import BaseModel
 from fastapi import APIRouter
 
@@ -5,11 +6,15 @@ from app.services.a1111_client import a1111
 
 router = APIRouter(prefix="/api/capabilities", tags=["capabilities"])
 
+_capabilities_cache: dict = {}
+_CACHE_TTL_SECONDS = 30
+
 
 class CapabilityResponse(BaseModel):
     a1111_connected: bool
     checkpoints: list[str]
     upscalers: list[str]
+    samplers: list[str]
     extensions: list[str]
     controlnet_available: bool
     controlnet_models: list[str]
@@ -19,8 +24,20 @@ class CapabilityResponse(BaseModel):
 
 @router.get("", response_model=CapabilityResponse)
 async def get_capabilities():
+    now = time.monotonic()
+    if _capabilities_cache.get("ts") and now - _capabilities_cache["ts"] < _CACHE_TTL_SECONDS:
+        return _capabilities_cache["data"]
+
+    result = await _fetch_capabilities()
+    _capabilities_cache["ts"] = now
+    _capabilities_cache["data"] = result
+    return result
+
+
+async def _fetch_capabilities() -> CapabilityResponse:
     checkpoints: list[str] = []
     upscalers: list[str] = []
+    samplers: list[str] = []
     extensions: list[str] = []
     controlnet_models: list[str] = []
     sam_heartbeat = False
@@ -30,6 +47,8 @@ async def get_capabilities():
         checkpoints = [_model_name(model) for model in raw_models]
         raw_upscalers = await a1111.get_upscalers()
         upscalers = [_named_item(upscaler) for upscaler in raw_upscalers]
+        raw_samplers = await a1111.get_samplers()
+        samplers = [_named_item(s) for s in raw_samplers]
         raw_extensions = await a1111.get_extensions()
         extensions = [_extension_name(extension) for extension in raw_extensions]
     except Exception:
@@ -37,6 +56,7 @@ async def get_capabilities():
             a1111_connected=False,
             checkpoints=[],
             upscalers=[],
+            samplers=[],
             extensions=[],
             controlnet_available=False,
             controlnet_models=[],
@@ -61,6 +81,7 @@ async def get_capabilities():
         a1111_connected=True,
         checkpoints=checkpoints,
         upscalers=upscalers,
+        samplers=samplers,
         extensions=extensions,
         controlnet_available=controlnet_available,
         controlnet_models=controlnet_models,

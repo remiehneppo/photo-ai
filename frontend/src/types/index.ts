@@ -14,6 +14,7 @@ export type Capabilities = {
   a1111_connected: boolean;
   checkpoints: string[];
   upscalers: string[];
+  samplers: string[];
   extensions: string[];
   controlnet_available: boolean;
   controlnet_models: string[];

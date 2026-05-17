@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException, UploadFile, File, Form
-from typing import List
+from typing import List, Optional
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import User
@@ -24,6 +24,7 @@ async def upscale_image(
     background_tasks: BackgroundTasks,
     image: UploadFile = File(...),
     mode: str = Form("default"),
+    upscaler: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -48,7 +49,7 @@ async def upscale_image(
     async def task():
         payload = {
             "image": b64_input,
-            "upscaler_1": preset["upscaler_1"],
+            "upscaler_1": upscaler if upscaler else preset["upscaler_1"],  # I4 override
             "upscaling_resize": preset["upscaling_resize"],
             "gfpgan_visibility": preset.get("gfpgan_visibility", 0.0),
             "codeformer_visibility": preset.get("codeformer_visibility", 0.0),

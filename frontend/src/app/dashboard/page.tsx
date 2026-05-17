@@ -1,6 +1,9 @@
 "use client";
 
 import { ActionButton } from "@/components/ActionButton";
+import { AdvancedPanel, defaultAdvanced, type AdvancedSettings } from "@/components/AdvancedPanel";
+import { AspectRatioSelector, type AspectRatio } from "@/components/AspectRatioSelector";
+import { BatchCountSelector, type BatchCount } from "@/components/BatchCountSelector";
 import { HistoryGrid } from "@/components/HistoryGrid";
 import { ImageResult } from "@/components/ImageResult";
 import { ImageUpload } from "@/components/ImageUpload";
@@ -10,12 +13,13 @@ import { PromptInput } from "@/components/PromptInput";
 import { StyleSelector } from "@/components/StyleSelector";
 import { PromptSuggestions } from "@/components/PromptSuggestions";
 import { clearToken, getToken } from "@/lib/auth";
-import { createVariations, deleteJob, depthGuide, editImage, faceRestoreImage, generateImage, generateImageWithReference, getCapabilities, getSuggestions, getStyles, imageUrl, inpaintImage, interrogateImage, listJobs, me, outpaintImage, poseControl, restorePhoto, sharpenImage, sketchToPhoto, upscaleImage } from "@/lib/api";
+import { createVariations, deleteJob, depthGuide, editImage, enhancePrompt, faceRestoreImage, generateImage, generateImageWithReference, getCapabilities, getSuggestions, getStyles, imageUrl, inpaintImage, interrogateImage, listJobs, me, outpaintImage, poseControl, restorePhoto, sharpenImage, sketchToPhoto, upscaleImage } from "@/lib/api";
 import type { Capabilities, ControlMode, Direction, HistoryImageTarget, ImageOut, JobDetail, Style, Suggestions, User } from "@/types";
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Brush, Clock3, Expand, ImageUp, Layers, Loader2, LogOut, PenTool, RefreshCw, SlidersHorizontal, Sparkles, Wand2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { Toaster, toast } from "sonner";
 
 type Tab = "generate" | "edit" | "inpaint" | "upscale" | "sharpen" | "outpaint" | "face_restore" | "variations" | "sketch" | "pose" | "depth" | "restore" | "history";
 type HistoryImageSeed = { target: HistoryImageTarget; file: File };
@@ -87,6 +91,7 @@ export default function DashboardPage() {
 
   return (
     <main className="min-h-screen">
+      <Toaster richColors position="top-right" />
       <header className="border-b border-line bg-panel">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -121,7 +126,7 @@ export default function DashboardPage() {
           {tab === "generate" && <GenerateTab capabilities={capabilities} styles={styles} suggestions={suggestions} />}
           {tab === "edit" && <EditTab capabilities={capabilities} styles={styles} historyImageSeed={historyImageSeed} suggestions={suggestions} />}
           {tab === "inpaint" && <InpaintTab styles={styles} historyImageSeed={historyImageSeed} suggestions={suggestions} />}
-          {tab === "upscale" && <UpscaleTab historyImageSeed={historyImageSeed} />}
+          {tab === "upscale" && <UpscaleTab historyImageSeed={historyImageSeed} capabilities={capabilities} />}
           {tab === "sharpen" && <SharpenTab historyImageSeed={historyImageSeed} />}
           {tab === "outpaint" && <OutpaintTab capabilities={capabilities} styles={styles} historyImageSeed={historyImageSeed} suggestions={suggestions} />}
           {tab === "face_restore" && <FaceRestoreTab />}
@@ -172,12 +177,33 @@ function GenerateTab({ capabilities, styles, suggestions }: { capabilities: Capa
   const [controlMode, setControlMode] = useState<ControlMode>("edges");
   const [controlWeight, setControlWeight] = useState(0.7);
   const [seed, setSeed] = useState("");
+  const [aspectRatio, setAspectRatio] = useState<AspectRatio | null>(null);
+  const [batchCount, setBatchCount] = useState<BatchCount>(1);
+  const [advanced, setAdvanced] = useState<AdvancedSettings>(defaultAdvanced());
+  const [checkpoint, setCheckpoint] = useState<string>("");
+  const [enhancing, setEnhancing] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
   const [result, setResult] = useState<JobDetail | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const allExamples = Object.values(suggestions?.prompts_by_task?.["generate"] ?? {}).flat();
+  const samplers = capabilities?.samplers ?? [];
+  const checkpoints = capabilities?.checkpoints ?? [];
+
+  async function handleEnhance() {
+    if (!prompt.trim()) return;
+    setEnhancing(true);
+    try {
+      const result = await enhancePrompt(prompt, style);
+      setPrompt(result.prompt);
+      toast.success("Prompt enhanced!");
+    } catch {
+      toast.error("Could not enhance prompt");
+    } finally {
+      setEnhancing(false);
+    }
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -188,10 +214,27 @@ function GenerateTab({ capabilities, styles, suggestions }: { capabilities: Capa
       const seedValue = parseOptionalNumber(seed);
       const job = controlImage
         ? await generateImageWithReference({ prompt, style, control_image: controlImage, control_mode: controlMode, control_weight: controlWeight, fix_face: fixFace, fix_hands: fixHands, seed: seedValue })
-        : await generateImage({ prompt, style, fix_face: fixFace, fix_hands: fixHands, seed: seedValue });
+        : await generateImage({
+            prompt,
+            style,
+            fix_face: fixFace,
+            fix_hands: fixHands,
+            seed: seedValue,
+            aspect_ratio: aspectRatio,
+            negative_prompt: advanced.negativePrompt || null,
+            steps: advanced.steps,
+            cfg_scale: advanced.cfgScale,
+            sampler_name: advanced.samplerName,
+            batch_count: batchCount,
+            tiling: advanced.tiling,
+            checkpoint: checkpoint || null,
+          });
       setJobId(job.job_id);
+      toast.success("Generation started!");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not start generation");
+      const msg = err instanceof Error ? err.message : "Could not start generation";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -202,11 +245,41 @@ function GenerateTab({ capabilities, styles, suggestions }: { capabilities: Capa
       <form onSubmit={submit} className="grid gap-4">
         <StyleSelector value={style} onChange={setStyle} styles={styles} />
         <StyleSuggestionBanner prompt={prompt} currentStyle={style} styleKeywords={suggestions?.style_keywords ?? {}} onApply={setStyle} />
-        <PromptInput value={prompt} onChange={setPrompt} suggestions={allExamples} />
+        <div className="relative">
+          <PromptInput value={prompt} onChange={setPrompt} suggestions={allExamples} />
+          <button
+            type="button"
+            onClick={handleEnhance}
+            disabled={enhancing || !prompt.trim()}
+            className="focus-ring absolute bottom-2 right-2 flex items-center gap-1 rounded-md border border-line bg-white px-2 py-1 text-xs font-semibold text-accent hover:bg-panel disabled:opacity-50"
+          >
+            {enhancing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+            Enhance
+          </button>
+        </div>
         {suggestions && (
           <PromptSuggestions promptsByTask={suggestions.prompts_by_task} task="generate" currentStyle={style} onSelect={setPrompt} />
         )}
-        <SeedField value={seed} onChange={setSeed} />
+        <AspectRatioSelector value={aspectRatio} onChange={setAspectRatio} />
+        <div className="flex flex-wrap gap-4">
+          <BatchCountSelector value={batchCount} onChange={setBatchCount} />
+          <SeedField value={seed} onChange={setSeed} />
+        </div>
+        {checkpoints.length > 1 && (
+          <div>
+            <label className="mb-1.5 block text-sm font-semibold text-ink">Checkpoint</label>
+            <select
+              value={checkpoint}
+              onChange={(e) => setCheckpoint(e.target.value)}
+              className="focus-ring w-full rounded-md border border-line bg-white px-3 py-2 text-sm text-ink"
+            >
+              <option value="">Use style preset</option>
+              {checkpoints.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+        )}
         <ReferenceControl
           capabilities={capabilities}
           file={controlImage}
@@ -217,13 +290,14 @@ function GenerateTab({ capabilities, styles, suggestions }: { capabilities: Capa
           onWeight={setControlWeight}
         />
         <FixOptions capabilities={capabilities} fixFace={fixFace} fixHands={fixHands} onFixFace={setFixFace} onFixHands={setFixHands} />
+        <AdvancedPanel value={advanced} onChange={setAdvanced} samplers={samplers} />
         {error && <p className="text-sm text-danger">{error}</p>}
         <ActionButton disabled={loading || !prompt.trim()} icon={<Wand2 className="h-4 w-4" />}>
           {loading ? "Starting..." : "Generate"}
         </ActionButton>
       </form>
       <div className="mt-5 grid gap-4">
-        <JobStatus jobId={jobId} onDone={setResult} />
+        <JobStatus jobId={jobId} onDone={(job) => { setResult(job); if (job) toast.success("Generation complete!"); }} />
         <ImageResult job={result} onUseSeed={(s) => setSeed(String(s))} />
       </div>
     </Panel>
@@ -242,12 +316,16 @@ function EditTab({ capabilities, styles, historyImageSeed, suggestions }: { capa
   const [seed, setSeed] = useState("");
   const [denoisingStrength, setDenoisingStrength] = useState<number | null>(null);
   const [interrogating, setInterrogating] = useState(false);
+  const [advanced, setAdvanced] = useState<AdvancedSettings>(defaultAdvanced());
+  const [checkpoint, setCheckpoint] = useState<string>("");
   const [jobId, setJobId] = useState<string | null>(null);
   const [result, setResult] = useState<JobDetail | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const allExamples = Object.values(suggestions?.prompts_by_task?.["edit"] ?? {}).flat();
+  const samplers = capabilities?.samplers ?? [];
+  const checkpoints = capabilities?.checkpoints ?? [];
 
   async function handleSuggestPrompt() {
     if (!file || interrogating) return;
@@ -280,11 +358,20 @@ function EditTab({ capabilities, styles, historyImageSeed, suggestions }: { capa
         control_mode: controlMode,
         control_weight: controlWeight,
         seed: parseOptionalNumber(seed),
-        denoising_strength: denoisingStrength
+        denoising_strength: denoisingStrength,
+        negative_prompt: advanced.negativePrompt || null,
+        steps: advanced.steps,
+        cfg_scale: advanced.cfgScale,
+        sampler_name: advanced.samplerName,
+        tiling: advanced.tiling,
+        checkpoint: checkpoint || null,
       });
       setJobId(job.job_id);
+      toast.success("Edit started!");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not start edit");
+      const msg = err instanceof Error ? err.message : "Could not start edit";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -303,6 +390,21 @@ function EditTab({ capabilities, styles, historyImageSeed, suggestions }: { capa
         )}
         <SeedField value={seed} onChange={setSeed} />
         <DenoisingControl value={denoisingStrength} defaultValue={0.55} onChange={setDenoisingStrength} />
+        {checkpoints.length > 1 && (
+          <div>
+            <label className="mb-1.5 block text-sm font-semibold text-ink">Checkpoint</label>
+            <select
+              value={checkpoint}
+              onChange={(e) => setCheckpoint(e.target.value)}
+              className="focus-ring w-full rounded-md border border-line bg-white px-3 py-2 text-sm text-ink"
+            >
+              <option value="">Use style preset</option>
+              {checkpoints.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+        )}
         <ReferenceControl
           capabilities={capabilities}
           file={controlImage}
@@ -313,13 +415,14 @@ function EditTab({ capabilities, styles, historyImageSeed, suggestions }: { capa
           onWeight={setControlWeight}
         />
         <FixOptions capabilities={capabilities} fixFace={fixFace} fixHands={fixHands} onFixFace={setFixFace} onFixHands={setFixHands} />
+        <AdvancedPanel value={advanced} onChange={setAdvanced} samplers={samplers} />
         {error && <p className="text-sm text-danger">{error}</p>}
         <ActionButton disabled={loading || !file || !prompt.trim()} icon={<Brush className="h-4 w-4" />}>
           {loading ? "Starting..." : "Edit image"}
         </ActionButton>
       </form>
       <div className="mt-5 grid gap-4">
-        <JobStatus jobId={jobId} onDone={setResult} />
+        <JobStatus jobId={jobId} onDone={(job) => { setResult(job); if (job) toast.success("Edit complete!"); }} />
         <ImageResult job={result} onUseSeed={(s) => setSeed(String(s))} />
       </div>
     </Panel>
@@ -416,13 +519,16 @@ function InpaintTab({ styles, historyImageSeed, suggestions }: { styles: typeof 
   );
 }
 
-function UpscaleTab({ historyImageSeed }: { historyImageSeed: HistoryImageSeed | null }) {
+function UpscaleTab({ historyImageSeed, capabilities }: { historyImageSeed: HistoryImageSeed | null; capabilities: Capabilities | null }) {
   const [mode, setMode] = useState("default");
+  const [upscaler, setUpscaler] = useState<string>("");
   const [file, setFile] = useState<File | null>(() => (historyImageSeed?.target === "upscale" ? historyImageSeed.file : null));
   const [jobId, setJobId] = useState<string | null>(null);
   const [result, setResult] = useState<JobDetail | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const upscalers = capabilities?.upscalers ?? [];
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -431,10 +537,13 @@ function UpscaleTab({ historyImageSeed }: { historyImageSeed: HistoryImageSeed |
     setLoading(true);
     setResult(null);
     try {
-      const job = await upscaleImage({ mode, image: file });
+      const job = await upscaleImage({ mode, image: file, upscaler: upscaler || null });
       setJobId(job.job_id);
+      toast.success("Upscale started!");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not start upscale");
+      const msg = err instanceof Error ? err.message : "Could not start upscale";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -449,13 +558,28 @@ function UpscaleTab({ historyImageSeed }: { historyImageSeed: HistoryImageSeed |
           <option value="face_restore">Face restore</option>
           <option value="anime">Anime</option>
         </select>
+        {upscalers.length > 0 && (
+          <div>
+            <label className="mb-1.5 block text-sm font-semibold text-ink">Upscaler Model</label>
+            <select
+              className="focus-ring h-11 w-full rounded-md border border-line bg-white px-3"
+              value={upscaler}
+              onChange={(e) => setUpscaler(e.target.value)}
+            >
+              <option value="">Use mode default</option>
+              {upscalers.map((u) => (
+                <option key={u} value={u}>{u}</option>
+              ))}
+            </select>
+          </div>
+        )}
         {error && <p className="text-sm text-danger">{error}</p>}
         <ActionButton disabled={loading || !file} icon={<ImageUp className="h-4 w-4" />}>
           {loading ? "Starting..." : "Upscale"}
         </ActionButton>
       </form>
       <div className="mt-5 grid gap-4">
-        <JobStatus jobId={jobId} onDone={setResult} />
+        <JobStatus jobId={jobId} onDone={(job) => { setResult(job); if (job) toast.success("Upscale complete!"); }} />
         <ImageResult job={result} />
       </div>
     </Panel>

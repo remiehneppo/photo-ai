@@ -103,10 +103,27 @@ export function getStyles() {
   return request<{ styles: Style[] }>("/api/generate/styles");
 }
 
-export function generateImage(payload: { prompt: string; style: Style; fix_face?: boolean; fix_hands?: boolean; seed?: number | null }) {
+export function generateImage(payload: {
+  prompt: string;
+  style: Style;
+  fix_face?: boolean;
+  fix_hands?: boolean;
+  seed?: number | null;
+  aspect_ratio?: string | null;
+  negative_prompt?: string | null;
+  steps?: number | null;
+  cfg_scale?: number | null;
+  sampler_name?: string | null;
+  batch_count?: number;
+  tiling?: boolean;
+  checkpoint?: string | null;
+}) {
+  const body: Record<string, unknown> = { ...payload };
+  // Clean up nulls to avoid sending them unnecessarily
+  Object.keys(body).forEach((k) => body[k] == null && delete body[k]);
   return request<JobResponse>("/api/generate", {
     method: "POST",
-    body: JSON.stringify(payload)
+    body: JSON.stringify(body)
   });
 }
 
@@ -143,6 +160,12 @@ export function editImage(payload: {
   control_weight?: number;
   seed?: number | null;
   denoising_strength?: number | null;
+  negative_prompt?: string | null;
+  steps?: number | null;
+  cfg_scale?: number | null;
+  sampler_name?: string | null;
+  tiling?: boolean;
+  checkpoint?: string | null;
 }) {
   const form = new FormData();
   form.set("prompt", payload.prompt);
@@ -152,6 +175,12 @@ export function editImage(payload: {
   form.set("fix_hands", String(Boolean(payload.fix_hands)));
   if (payload.seed != null) form.set("seed", String(payload.seed));
   if (payload.denoising_strength != null) form.set("denoising_strength", String(payload.denoising_strength));
+  if (payload.negative_prompt) form.set("negative_prompt", payload.negative_prompt);
+  if (payload.steps != null) form.set("steps", String(payload.steps));
+  if (payload.cfg_scale != null) form.set("cfg_scale", String(payload.cfg_scale));
+  if (payload.sampler_name) form.set("sampler_name", payload.sampler_name);
+  if (payload.tiling) form.set("tiling", "true");
+  if (payload.checkpoint) form.set("checkpoint", payload.checkpoint);
   if (payload.control_image) {
     form.set("control_image", payload.control_image);
     form.set("control_mode", payload.control_mode || "edges");
@@ -160,10 +189,11 @@ export function editImage(payload: {
   return request<JobResponse>("/api/edit", { method: "POST", body: form });
 }
 
-export function upscaleImage(payload: { mode: string; image: File }) {
+export function upscaleImage(payload: { mode: string; image: File; upscaler?: string | null }) {
   const form = new FormData();
   form.set("mode", payload.mode);
   form.set("image", payload.image);
+  if (payload.upscaler) form.set("upscaler", payload.upscaler);
   return request<JobResponse>("/api/upscale", { method: "POST", body: form });
 }
 
@@ -290,6 +320,13 @@ export function restorePhoto(payload: { image: File; mode?: string }) {
   fd.append("image", payload.image);
   fd.append("mode", payload.mode ?? "default");
   return request<{ job_id: string; status: string }>("/api/restore", { method: "POST", body: fd });
+}
+
+export function enhancePrompt(prompt: string, style: string = "realistic") {
+  return request<{ prompt: string }>("/api/generate/enhance-prompt", {
+    method: "POST",
+    body: JSON.stringify({ prompt, style })
+  });
 }
 
 export function upscaleBatch(payload: { images: File[]; mode?: string }) {

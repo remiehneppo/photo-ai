@@ -1,5 +1,6 @@
 import asyncio
 from io import BytesIO
+from typing import Any, Optional
 
 from PIL import Image as PILImage
 
@@ -8,6 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import app.database as database
+import app.services.storage_service as storage_service
 from app.services import job_service
 from app.database import Base
 from app.models.image import Image
@@ -22,11 +24,11 @@ class FakeA1111:
 
     async def txt2img(self, payload):
         self.payloads.append(("txt2img", payload))
-        return ["encoded-output"]
+        return (["encoded-output"], None)
 
     async def img2img(self, payload):
         self.payloads.append(("img2img", payload))
-        return ["encoded-output"]
+        return (["encoded-output"], None)
 
     async def upscale(self, payload):
         self.payloads.append(("upscale", payload))
@@ -53,8 +55,29 @@ class FakeA1111:
             {"name": "sd-webui-segment-anything"},
         ]
 
+    async def get_samplers(self):
+        return [{"name": "Euler a"}, {"name": "DPM++ 2M Karras"}]
+
     async def get_controlnet_models(self):
         return ["control_v11p_sd15_canny"]
+
+    async def load_checkpoint(self, model_name: str) -> None:
+        pass
+
+    async def interrupt(self) -> None:
+        pass
+
+    async def interrogate(self, _image_base64: str) -> dict[str, Any]:
+        return {"caption": "a photo", "detail": "detailed"}
+
+    async def sam_predict(self, _image_base64: str, _points: list[tuple[float, float]], _labels: list[int]) -> str | None:
+        return None
+
+    async def upscale_batch(self, _payload: dict[str, Any]) -> list[str]:
+        return ["upscaled"]
+
+    async def offload_unused_models(self) -> None:
+        pass
 
     async def sam_heartbeat(self):
         return True
@@ -133,6 +156,9 @@ def patch_common(monkeypatch, router_module, session_factory_, fake):
     monkeypatch.setattr(router_module, "SessionLocal", session_factory_, raising=False)
     monkeypatch.setattr(database, "SessionLocal", session_factory_)
     monkeypatch.setattr(job_service, "SessionLocal", session_factory_)
+    # save_output/save_upload may live in the router OR in storage_service (used by job_service)
+    monkeypatch.setattr(storage_service, "save_output", lambda _bytes: async_return(("/tmp/output.png", "output.png")))
+    monkeypatch.setattr(storage_service, "save_upload", lambda _bytes: async_return(("/tmp/input.png", "input.png")))
     monkeypatch.setattr(router_module, "save_output", lambda _bytes: async_return(("/tmp/output.png", "output.png")), raising=False)
     monkeypatch.setattr(router_module, "save_upload", lambda _bytes: async_return(("/tmp/input.png", "input.png")), raising=False)
     monkeypatch.setattr(router_module, "run_job", run_immediately, raising=False)
@@ -411,7 +437,7 @@ def test_jobs_route_returns_current_user_history():
     result = jobs.list_jobs(db=db, current_user=user, skip=0, limit=20)
     detail = jobs.get_job(job_id="job-1", db=db, current_user=user)
 
-    assert [job.id for job in result] == ["job-1"]
+    assert [job.id for job in result.items] == ["job-1"]
     assert detail.images[0].url == "/api/images/output/output.png"
     assert detail.progress_percent == 100
     assert detail.progress_label == "Complete"
@@ -427,7 +453,7 @@ def test_jobs_route_clamps_to_requested_limit():
 
     result = jobs.list_jobs(db=db, current_user=user, skip=0, limit=2)
 
-    assert len(result) == 2
+    assert len(result.items) == 2
 
 
 def test_delete_job_removes_only_current_user_history(monkeypatch):
@@ -499,13 +525,214 @@ def test_upscale_rejects_unknown_mode_before_upload_read(monkeypatch):
 def test_capabilities_route_reports_a1111_features(monkeypatch):
     fake = FakeA1111()
     monkeypatch.setattr(capabilities, "a1111", fake)
+    # Clear cache so test doesn't hit stale data
+    capabilities._capabilities_cache.clear()
 
     result = asyncio.run(capabilities.get_capabilities())
 
     assert result.a1111_connected is True
     assert result.checkpoints == ["realismIllustriousBy_v55FP16", "anything-v5", "Juggernaut-XL_v9_RunDiffusionPhoto_v2", "v1-5-pruned-emaonly"]
     assert result.upscalers == ["R-ESRGAN 4x+", "4x-UltraSharp"]
+    assert result.samplers == ["Euler a", "DPM++ 2M Karras"]
     assert result.controlnet_available is True
     assert result.controlnet_models == ["control_v11p_sd15_canny"]
     assert result.adetailer_available is True
     assert result.sam_available is True
+
+
+# ── Phase G tests ──────────────────────────────────────────────────────────────
+
+def test_generate_aspect_ratio_overrides_preset_dimensions(monkeypatch):
+    factory = session_factory()
+    db = factory()
+    user = seed_user(db)
+    fake = FakeA1111()
+    patch_common(monkeypatch, generate, factory, fake)
+    tasks = CapturedTasks()
+
+    asyncio.run(call_and_run_tasks(
+        generate.generate(
+            req=generate.GenerateRequest(prompt="test", style="realistic", aspect_ratio="16:9"),
+            background_tasks=tasks,
+            db=db,
+            current_user=user,
+        ),
+        tasks,
+    ))
+
+    payload = fake.payloads[0][1]
+    assert payload["width"] == 912
+    assert payload["height"] == 512
+
+
+def test_generate_negative_prompt_prepended(monkeypatch):
+    factory = session_factory()
+    db = factory()
+    user = seed_user(db)
+    fake = FakeA1111()
+    patch_common(monkeypatch, generate, factory, fake)
+    tasks = CapturedTasks()
+
+    asyncio.run(call_and_run_tasks(
+        generate.generate(
+            req=generate.GenerateRequest(prompt="portrait", style="realistic", negative_prompt="blurry, low quality"),
+            background_tasks=tasks,
+            db=db,
+            current_user=user,
+        ),
+        tasks,
+    ))
+
+    negative = fake.payloads[0][1]["negative_prompt"]
+    assert negative.startswith("blurry, low quality,")
+
+
+def test_generate_advanced_params_override_preset(monkeypatch):
+    factory = session_factory()
+    db = factory()
+    user = seed_user(db)
+    fake = FakeA1111()
+    patch_common(monkeypatch, generate, factory, fake)
+    tasks = CapturedTasks()
+
+    asyncio.run(call_and_run_tasks(
+        generate.generate(
+            req=generate.GenerateRequest(prompt="portrait", style="realistic", steps=30, cfg_scale=9.0, sampler_name="DPM++ 2M Karras"),
+            background_tasks=tasks,
+            db=db,
+            current_user=user,
+        ),
+        tasks,
+    ))
+
+    payload = fake.payloads[0][1]
+    assert payload["steps"] == 30
+    assert payload["cfg_scale"] == 9.0
+    assert payload["sampler_name"] == "DPM++ 2M Karras"
+
+
+def test_generate_batch_count_creates_multiple_images(monkeypatch):
+    factory = session_factory()
+    db = factory()
+    user = seed_user(db)
+    fake = FakeA1111()
+    patch_common(monkeypatch, generate, factory, fake)
+    tasks = CapturedTasks()
+
+    response = asyncio.run(call_and_run_tasks(
+        generate.generate(
+            req=generate.GenerateRequest(prompt="portrait", style="realistic", batch_count=3),
+            background_tasks=tasks,
+            db=db,
+            current_user=user,
+        ),
+        tasks,
+    ))
+
+    # 3 txt2img calls
+    assert len([p for p in fake.payloads if p[0] == "txt2img"]) == 3
+    # 3 output images saved
+    images = db.query(Image).filter(Image.job_id == response.job_id, Image.type == "output").all()
+    assert len(images) == 3
+
+
+def test_generate_tiling_param_forwarded(monkeypatch):
+    factory = session_factory()
+    db = factory()
+    user = seed_user(db)
+    fake = FakeA1111()
+    patch_common(monkeypatch, generate, factory, fake)
+    tasks = CapturedTasks()
+
+    asyncio.run(call_and_run_tasks(
+        generate.generate(
+            req=generate.GenerateRequest(prompt="texture", style="realistic", tiling=True),
+            background_tasks=tasks,
+            db=db,
+            current_user=user,
+        ),
+        tasks,
+    ))
+
+    assert fake.payloads[0][1]["tiling"] is True
+
+
+def test_generate_checkpoint_override_skips_resolve(monkeypatch):
+    factory = session_factory()
+    db = factory()
+    user = seed_user(db)
+    fake = FakeA1111()
+    patch_common(monkeypatch, generate, factory, fake)
+    tasks = CapturedTasks()
+
+    asyncio.run(call_and_run_tasks(
+        generate.generate(
+            req=generate.GenerateRequest(prompt="portrait", style="realistic", checkpoint="my-custom-model"),
+            background_tasks=tasks,
+            db=db,
+            current_user=user,
+        ),
+        tasks,
+    ))
+
+    payload = fake.payloads[0][1]
+    assert payload["override_settings"]["sd_model_checkpoint"] == "my-custom-model"
+
+
+def test_enhance_prompt_returns_enriched_text():
+    req = generate.EnhancePromptRequest(prompt="a dog", style="realistic")
+    result = generate.enhance_prompt(req)
+    assert "a dog" in result["prompt"]
+    # Should have quality tags from preset appended
+    assert len(result["prompt"]) > len("a dog")
+
+
+def test_upscale_route_accepts_custom_upscaler(monkeypatch):
+    factory = session_factory()
+    db = factory()
+    user = seed_user(db)
+    fake = FakeA1111()
+    patch_common(monkeypatch, upscale, factory, fake)
+    tasks = CapturedTasks()
+
+    asyncio.run(call_and_run_tasks(
+        upscale.upscale_image(
+            background_tasks=tasks,
+            image=PngUpload(),
+            mode="default",
+            upscaler="4x-UltraSharp",
+            db=db,
+            current_user=user,
+        ),
+        tasks,
+    ))
+
+    assert fake.payloads[0][1]["upscaler_1"] == "4x-UltraSharp"
+
+
+def test_jobs_route_filter_by_feature(monkeypatch):
+    factory = session_factory()
+    db = factory()
+    user = seed_user(db)
+    db.add(Job(id="job-gen", user_id=user.id, feature="txt2img", style="realistic", status="done", progress_percent=100))
+    db.add(Job(id="job-edit", user_id=user.id, feature="img2img", style="realistic", status="done", progress_percent=100))
+    db.commit()
+
+    result = jobs.list_jobs(db=db, current_user=user, skip=0, limit=20, feature="txt2img")
+
+    assert len(result.items) == 1
+    assert result.items[0].id == "job-gen"
+
+
+def test_capabilities_cache_returns_same_result(monkeypatch):
+    fake = FakeA1111()
+    monkeypatch.setattr(capabilities, "a1111", fake)
+    capabilities._capabilities_cache.clear()
+
+    result1 = asyncio.run(capabilities.get_capabilities())
+    result2 = asyncio.run(capabilities.get_capabilities())
+
+    assert result1.a1111_connected == result2.a1111_connected
+    # Second call should hit cache, not call get_models again
+    # (get_models was only called once since cache TTL hasn't expired)
+    assert result1.checkpoints == result2.checkpoints

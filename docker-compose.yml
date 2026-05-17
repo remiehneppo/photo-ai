@@ -62,6 +62,11 @@ services:
     command: sh -c "npx next start -H 0.0.0.0 -p $${FRONTEND_PORT:-18888}"
     ports:
       - "${FRONTEND_PORT:-18888}:${FRONTEND_PORT:-18888}"
+    healthcheck:
+      test: ["CMD", "sh", "-c", "wget -qO- http://127.0.0.1:${FRONTEND_PORT:-18888}/api/health 2>/dev/null || wget -qO- http://127.0.0.1:${FRONTEND_PORT:-18888}/ 2>/dev/null | head -c 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
 
 volumes:
   db-data:

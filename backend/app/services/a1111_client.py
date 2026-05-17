@@ -135,6 +135,12 @@ class A1111Client:
             self._raise_for_status(r, "get_extensions")
             return r.json()
 
+    async def get_samplers(self) -> list[dict]:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(f"{self.base_url}/sdapi/v1/samplers")
+            self._raise_for_status(r, "get_samplers")
+            return r.json()
+
     async def get_controlnet_models(self) -> list[str]:
         async with httpx.AsyncClient(timeout=10) as client:
             r = await client.get(f"{self.base_url}/controlnet/model_list")
