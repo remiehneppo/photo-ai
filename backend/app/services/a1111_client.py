@@ -15,13 +15,18 @@ class A1111Client:
     def __init__(self):
         self.base_url = A1111_BASE_URL
         self.timeout = httpx.Timeout(A1111_TIMEOUT_SECONDS)
+        self._loaded_checkpoint: str | None = None
 
     async def health_check(self) -> bool:
         try:
             async with httpx.AsyncClient(timeout=10) as client:
                 r = await client.get(f"{self.base_url}/sdapi/v1/sd-models")
                 return r.status_code == 200
-        except Exception:
+        except (httpx.ConnectError, httpx.TimeoutException):
+            logger.warning("a1111_health_check_failed connection_error")
+            return False
+        except Exception as e:
+            logger.warning("a1111_health_check_failed error=%s", e)
             return False
 
     async def set_model(self, model_name: str) -> None:
@@ -38,16 +43,23 @@ class A1111Client:
             self._raise_for_status(r, "reload_checkpoint")
 
     async def load_checkpoint(self, model_name: str) -> None:
+        if self._loaded_checkpoint == model_name:
+            logger.info("a1111_checkpoint_reuse checkpoint=%s", model_name)
+            return
+        if self._loaded_checkpoint and self._loaded_checkpoint != model_name:
+            await self.offload_unused_models()
         await self.set_model(model_name)
         await self.reload_checkpoint()
+        self._loaded_checkpoint = model_name
 
     async def offload_unused_models(self) -> None:
-        """Ask A1111 to unload the active checkpoint before loading the next job's model."""
+        """Ask A1111 to unload the active checkpoint when a job finishes."""
         if not A1111_OFFLOAD_BEFORE_JOB:
             return
         async with httpx.AsyncClient(timeout=30) as client:
             r = await client.post(f"{self.base_url}/sdapi/v1/unload-checkpoint")
             self._raise_for_status(r, "unload_checkpoint")
+            self._loaded_checkpoint = None
 
     async def txt2img(self, payload: dict[str, Any]) -> tuple[list[str], int | None]:
         """Returns list of base64-encoded images and the seed used."""
@@ -85,7 +97,14 @@ class A1111Client:
             r = await client.post(f"{self.base_url}/sdapi/v1/extra-batch-images", json=payload)
             self._raise_for_status(r, "upscale_batch")
             logger.info("a1111_upscale_batch_done duration_ms=%d", int((time.monotonic() - t0) * 1000))
-            return [img["image"] for img in r.json().get("images", [])]
+            images = r.json().get("images", [])
+            results: list[str] = []
+            for image in images:
+                if isinstance(image, str):
+                    results.append(image)
+                elif isinstance(image, dict) and isinstance(image.get("image"), str):
+                    results.append(image["image"])
+            return results
 
     async def interrupt(self) -> None:
         try:
@@ -155,6 +174,13 @@ class A1111Client:
                 return r.status_code == 200
         except Exception:
             return False
+
+    async def get_sam_models(self) -> list[str]:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(f"{self.base_url}/sam/sam-model")
+            self._raise_for_status(r, "get_sam_models")
+            data = r.json()
+            return [str(model) for model in data] if isinstance(data, list) else []
 
     async def sam_predict(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Call SAM (inpaint-anything) to get segmentation masks from click points."""

@@ -1,9 +1,10 @@
 "use client";
 
-import { imageUrl } from "@/lib/api";
+import { fetchImageBlob } from "@/lib/api";
 import type { HistoryImageTarget, ImageOut, JobDetail } from "@/types";
 import { Brush, Download, Expand, ImageUp, PenTool, SlidersHorizontal, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
 
 export function HistoryGrid({
   jobs,
@@ -30,7 +31,7 @@ export function HistoryGrid({
           <article key={job.id} className="rounded-md border border-line bg-white p-3">
             <div className="aspect-square overflow-hidden rounded-md bg-panel">
               {output ? (
-                <img src={imageUrl(output.url)} alt="" className="h-full w-full object-cover" />
+                <AuthImage src={output.url} alt="" className="h-full w-full object-cover" />
               ) : (
                 <div className="flex h-full items-center justify-center text-sm text-muted">{job.status}</div>
               )}
@@ -58,9 +59,9 @@ export function HistoryGrid({
                     <HistoryIconButton title="Use in Inpaint" disabled={busyImageId === output.id} onClick={() => onUseImage?.("inpaint", output)}>
                       <PenTool className="h-4 w-4" aria-hidden="true" />
                     </HistoryIconButton>
-                    <a className="focus-ring rounded-md border border-line p-2 hover:bg-panel" href={imageUrl(output.url)} download={output.filename || "image.png"} title="Download" aria-label="Download">
+                    <HistoryIconButton title="Download" disabled={busyImageId === output.id} onClick={() => downloadImage(output)}>
                       <Download className="h-4 w-4" aria-hidden="true" />
-                    </a>
+                    </HistoryIconButton>
                   </>
                 )}
                 {onDelete && (
@@ -75,6 +76,41 @@ export function HistoryGrid({
       })}
     </div>
   );
+}
+
+async function downloadImage(image: ImageOut) {
+  const blob = await fetchImageBlob(image.url);
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = image.filename || "image.png";
+  link.click();
+  URL.revokeObjectURL(objectUrl);
+}
+
+function AuthImage({ src, alt, className }: { src: string; alt: string; className?: string }) {
+  const [objectUrl, setObjectUrl] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    let nextUrl = "";
+    fetchImageBlob(src)
+      .then((blob) => {
+        if (cancelled) return;
+        nextUrl = URL.createObjectURL(blob);
+        setObjectUrl(nextUrl);
+      })
+      .catch(() => {
+        if (!cancelled) setObjectUrl("");
+      });
+    return () => {
+      cancelled = true;
+      if (nextUrl) URL.revokeObjectURL(nextUrl);
+    };
+  }, [src]);
+
+  if (!objectUrl) return <div className={className} aria-label={alt} />;
+  return <img src={objectUrl} alt={alt} className={className} />;
 }
 
 function HistoryIconButton({

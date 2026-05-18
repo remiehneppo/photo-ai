@@ -1,7 +1,8 @@
 import asyncio
 import logging
+import threading
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Awaitable, Callable, Any
 from sqlalchemy.orm import Session
 from app.models.job import Job
@@ -13,6 +14,7 @@ logger = logging.getLogger("photo_ai.jobs")
 ProgressProvider = Callable[[], Awaitable[dict[str, Any]]]
 PrepareProvider = Callable[[], Awaitable[None]]
 _a1111_job_lock = asyncio.Lock()
+_enqueue_lock = threading.Lock()
 _current_job_id: str | None = None
 
 MAX_CONCURRENT_JOBS_PER_USER = 2
@@ -40,29 +42,30 @@ def create_job(
     import uuid
     from fastapi import HTTPException
 
-    active = count_active_jobs(db, user_id)
-    if active >= MAX_CONCURRENT_JOBS_PER_USER:
-        raise HTTPException(
-            status_code=429,
-            detail=f"Too many active jobs. Maximum {MAX_CONCURRENT_JOBS_PER_USER} concurrent jobs allowed.",
-        )
+    with _enqueue_lock:
+        active = count_active_jobs(db, user_id)
+        if active >= MAX_CONCURRENT_JOBS_PER_USER:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Too many active jobs. Maximum {MAX_CONCURRENT_JOBS_PER_USER} concurrent jobs allowed.",
+            )
 
-    job = Job(
-        id=str(uuid.uuid4()),
-        user_id=user_id,
-        feature=feature,
-        style=style,
-        user_prompt=user_prompt,
-        status="pending",
-        progress_percent=0,
-        current_step=0,
-        total_steps=total_steps,
-        estimated_seconds=estimated_seconds,
-        progress_label=progress_label,
-    )
-    db.add(job)
-    db.commit()
-    return job
+        job = Job(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            feature=feature,
+            style=style,
+            user_prompt=user_prompt,
+            status="pending",
+            progress_percent=0,
+            current_step=0,
+            total_steps=total_steps,
+            estimated_seconds=estimated_seconds,
+            progress_label=progress_label,
+        )
+        db.add(job)
+        db.commit()
+        return job
 
 
 async def save_job_images(
@@ -117,6 +120,7 @@ async def run_job(
     task_fn: Callable[[], Any],
     progress_provider: ProgressProvider | None = None,
     prepare_provider: PrepareProvider | None = None,
+    cleanup_provider: PrepareProvider | None = None,
 ) -> None:
     """Run a generation task, updating job status in DB."""
     global _current_job_id
@@ -126,6 +130,7 @@ async def run_job(
     try:
         job = db.query(Job).filter(Job.id == job_id).first()
         if not job:
+            logger.error("job_not_found job_id=%s", job_id)
             return
         if job.status == "failed":
             # Job was cancelled before it started
@@ -139,31 +144,46 @@ async def run_job(
 
         logger.info("job_started job_id=%s feature=%s user_id=%s", job_id, feature, user_id)
 
-        if progress_provider:
-            update_job_progress(job_id, progress_percent=1, progress_label="Waiting for AI engine")
-            async with _a1111_job_lock:
-                _current_job_id = job_id
-                try:
-                    if prepare_provider:
-                        update_job_progress(job_id, progress_percent=2, progress_label="Freeing AI memory")
-                        await _run_prepare(job_id, prepare_provider)
+        async with _a1111_job_lock:
+            _current_job_id = job_id
+            try:
+                if progress_provider:
+                    update_job_progress(job_id, progress_percent=1, progress_label="Waiting for AI engine")
+
+                if prepare_provider:
+                    update_job_progress(job_id, progress_percent=2, progress_label="Freeing AI memory")
+                    await _run_prepare(job_id, prepare_provider)
+
+                if progress_provider:
                     update_job_progress(job_id, progress_percent=3, progress_label="Starting AI engine")
                     monitor = asyncio.create_task(_monitor_progress(job_id, progress_provider))
-                    await task_fn()
-                finally:
-                    _current_job_id = None
-        else:
-            await task_fn()
+
+                await task_fn()
+
+            finally:
+                if monitor:
+                    monitor.cancel()
+                    try:
+                        await monitor
+                    except asyncio.CancelledError:
+                        pass
+
+                if cleanup_provider:
+                    update_job_progress(job_id, progress_label="Freeing AI memory")
+                    await _run_prepare(job_id, cleanup_provider)
+
+                _current_job_id = None
 
         duration_ms = int((time.monotonic() - start_time) * 1000)
         job = db.query(Job).filter(Job.id == job_id).first()
-        job.status = "done"
-        job.progress_percent = 100
-        job.current_step = job.total_steps
-        job.eta_seconds = 0
-        job.progress_label = "Complete"
-        job.completed_at = datetime.utcnow()
-        db.commit()
+        if job:
+            job.status = "done"
+            job.progress_percent = 100
+            job.current_step = job.total_steps
+            job.eta_seconds = 0
+            job.progress_label = "Complete"
+            job.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            db.commit()
         logger.info("job_done job_id=%s feature=%s user_id=%s duration_ms=%s", job_id, feature, user_id, duration_ms)
     except Exception as e:
         duration_ms = int((time.monotonic() - start_time) * 1000)
@@ -173,11 +193,11 @@ async def run_job(
             job.status = "failed"
             job.progress_label = "Failed"
             job.error_message = _user_visible_error(e)
-            job.completed_at = datetime.utcnow()
+            job.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
             db.commit()
     finally:
         _current_job_id = None
-        if monitor:
+        if monitor and not monitor.cancelled():
             monitor.cancel()
             try:
                 await monitor

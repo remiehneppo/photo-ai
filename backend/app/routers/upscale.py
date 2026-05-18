@@ -58,7 +58,7 @@ async def upscale_image(
         img_bytes = a1111.decode_image(b64_result)
         await save_job_images(job_id, user_id, [img_bytes], input_file_path=file_path, input_filename=filename)
 
-    background_tasks.add_task(run_job, job_id, task, a1111.get_progress, a1111.offload_unused_models)
+    background_tasks.add_task(run_job, job_id, task, a1111.get_progress)
     return JobResponse(job_id=job_id, status="pending")
 
 
@@ -115,6 +115,5 @@ async def upscale_batch(
         first_path, first_name = images_data[0][1], images_data[0][2]
         await save_job_images(job_id, user_id, output_bytes_list, input_file_path=first_path, input_filename=first_name)
 
-    background_tasks.add_task(run_job, job_id, task, a1111.get_progress, a1111.offload_unused_models)
+    background_tasks.add_task(run_job, job_id, task, a1111.get_progress)
     return JobResponse(job_id=job_id, status="pending")
-

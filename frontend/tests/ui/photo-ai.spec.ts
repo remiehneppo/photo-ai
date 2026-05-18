@@ -21,9 +21,16 @@ async function fulfillJson(route: Route, json: unknown, status = 200) {
 
 async function mockApi(
   page: Page,
-  options: { controlnetModels?: string[]; adetailerAvailable?: boolean; samAvailable?: boolean } = {}
+  options: {
+    controlnetModels?: string[];
+    adetailerAvailable?: boolean;
+    samAvailable?: boolean;
+    immediateJobCompletion?: boolean;
+    onJobDetailRequest?: (jobId: string) => void;
+  } = {}
 ) {
   const jobs = new Map<string, Record<string, unknown>>();
+  const jobPolls = new Map<string, number>();
   const controlnetModels = options.controlnetModels ?? [
     "control_v11p_sd15_canny",
     "control_v11f1p_sd15_depth",
@@ -98,6 +105,11 @@ async function mockApi(
       return;
     }
 
+    if (url.pathname === "/api/suggestions") {
+      await fulfillJson(route, { prompts_by_task: {}, style_keywords: {} });
+      return;
+    }
+
     const jobStarts: Record<string, string> = {
       "/api/generate": "txt2img",
       "/api/generate/reference": "txt2img",
@@ -109,46 +121,69 @@ async function mockApi(
 
     if (method === "POST" && jobStarts[url.pathname]) {
       const id = `job-${jobStarts[url.pathname]}`;
+      const completed = options.immediateJobCompletion ?? false;
       jobs.set(id, {
         id,
         feature: jobStarts[url.pathname],
         style: "realistic",
         user_prompt: "mock prompt",
-        status: "done",
-        progress_percent: 100,
-        current_step: 10,
+        status: completed ? "done" : "pending",
+        progress_percent: completed ? 100 : 0,
+        current_step: completed ? 10 : 0,
         total_steps: 10,
-        eta_seconds: 0,
+        eta_seconds: completed ? 0 : 30,
         estimated_seconds: 30,
-        progress_label: "Complete",
+        progress_label: completed ? "Complete" : "Queued",
         error_message: null,
         created_at: new Date("2026-05-13T12:00:00Z").toISOString(),
-        completed_at: new Date("2026-05-13T12:01:00Z").toISOString(),
+        completed_at: completed ? new Date("2026-05-13T12:01:00Z").toISOString() : null,
         images: [
           { id: `${id}-input`, type: "input", url: "/api/images/input/input.png", filename: "input.png" },
           { id: `${id}-output`, type: "output", url: "/api/images/output/output.png", filename: "output.png" }
         ]
       });
-      await fulfillJson(route, { job_id: id, status: "pending" });
+      jobPolls.set(id, 0);
+      await fulfillJson(route, { job_id: id, status: completed ? "done" : "pending" });
       return;
     }
 
     if (url.pathname === "/api/jobs") {
-      await fulfillJson(route, Array.from(jobs.values()));
+      const items = Array.from(jobs.values());
+      await fulfillJson(route, { total: items.length, items });
       return;
     }
 
     const jobMatch = url.pathname.match(/^\/api\/jobs\/(.+)$/);
     if (jobMatch) {
       const id = jobMatch[1];
+      options.onJobDetailRequest?.(id);
       if (method === "DELETE") {
         jobs.delete(id);
+        jobPolls.delete(id);
         await route.fulfill({ status: 204, headers: corsHeaders });
         return;
       }
+      const existing = jobs.get(id);
+      if (existing && existing.status !== "done" && existing.status !== "failed") {
+        const nextPoll = (jobPolls.get(id) ?? 0) + 1;
+        jobPolls.set(id, nextPoll);
+        if (nextPoll === 1) {
+          existing.status = "processing";
+          existing.progress_percent = 48;
+          existing.current_step = 5;
+          existing.progress_label = "Step 5 of 10";
+        } else {
+          existing.status = "done";
+          existing.progress_percent = 100;
+          existing.current_step = 10;
+          existing.eta_seconds = 0;
+          existing.progress_label = "Complete";
+          existing.completed_at = new Date("2026-05-13T12:01:00Z").toISOString();
+        }
+      }
       await fulfillJson(
         route,
-        jobs.get(id) || {
+        existing || {
           id,
           feature: "txt2img",
           style: "realistic",
@@ -173,8 +208,8 @@ async function mockApi(
   });
 }
 
-async function signIn(page: Page) {
-  await mockApi(page);
+async function signIn(page: Page, options?: Parameters<typeof mockApi>[1]) {
+  await mockApi(page, options);
   await page.goto("/login");
   await page.waitForLoadState("networkidle");
   await page.getByLabel("Email or username").fill("creator");
@@ -221,14 +256,35 @@ test("generate tab lets a creator choose style, submit prompt, and see result", 
   await page.getByRole("button", { name: "Anime" }).click();
   await expect(page.getByText("Reference control")).toBeVisible();
   await uploadImage(page);
-  await page.getByRole("button", { name: "Pose" }).click();
+  await page.getByRole("button", { name: /^Pose$/ }).click();
   await page.getByLabel("Fix face").check();
   await page.getByPlaceholder("Describe the image you want...").fill("cinematic portrait in neon rain");
   await page.getByRole("button", { name: "Generate" }).last().click();
 
   await expect(page.getByText("job-txt2img")).toBeVisible();
   await expect(page.getByText("done")).toBeVisible();
-  await expect(page.getByText("Output")).toBeVisible();
+  await expect(page.getByRole("button", { name: /After/ })).toBeVisible();
+});
+
+test("generation completion notifies once and keeps before/after order", async ({ page }) => {
+  let jobDetailRequests = 0;
+  await signIn(page, {
+    immediateJobCompletion: true,
+    onJobDetailRequest: () => {
+      jobDetailRequests += 1;
+    }
+  });
+
+  await page.getByPlaceholder("Describe the image you want...").fill("comparison seed");
+  await page.getByRole("button", { name: "Generate" }).last().click();
+
+  await expect(page.getByText("Generation complete!")).toBeVisible();
+
+  const afterClipPath = await page.getByAltText("After").evaluate((img) => (img.parentElement as HTMLElement | null)?.style.clipPath || "");
+  expect(afterClipPath).toContain("0px 0px 0px 50%");
+
+  await page.waitForTimeout(1500);
+  expect(jobDetailRequests).toBeLessThanOrEqual(2);
 });
 
 test("reference controls disable modes whose ControlNet model is missing", async ({ page }) => {
@@ -244,8 +300,8 @@ test("reference controls disable modes whose ControlNet model is missing", async
 
   await uploadImage(page);
   await expect(page.getByRole("button", { name: "Edges" })).toBeEnabled();
-  await expect(page.getByRole("button", { name: "Depth" })).toBeEnabled();
-  await expect(page.getByRole("button", { name: "Pose" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /^Depth$/ })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /^Pose$/ })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Product" })).toBeEnabled();
 });
 
@@ -258,9 +314,9 @@ test("upload workflows expose edit, upscale, sharpen, and expand controls withou
   await page.getByRole("button", { name: "Edit image" }).click();
   await expect(page.getByText("job-img2img")).toBeVisible();
 
-  await page.getByRole("button", { name: "Upscale" }).click();
+  await page.getByRole("navigation").getByRole("button", { name: /^Upscale$/ }).click();
   await uploadImage(page);
-  await page.getByRole("combobox").selectOption("face_restore");
+  await page.getByRole("combobox").first().selectOption("face_restore");
   await page.getByRole("button", { name: "Upscale" }).last().click();
   await expect(page.getByText("job-upscale")).toBeVisible();
 

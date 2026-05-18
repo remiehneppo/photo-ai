@@ -9,6 +9,8 @@ from app.services.a1111_client import a1111
 from app.services.storage_service import save_upload
 from app.services.job_service import create_job, run_job, save_job_images
 from app.services.upload_service import read_image_upload
+from app.services.model_service import add_model_override, resolve_checkpoint
+from app.services.preset_service import get_model_meta
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/variations", tags=["variations"])
@@ -59,6 +61,9 @@ async def create_variations(
     b64_input = a1111.encode_image(image_bytes)
 
     async def task():
+        checkpoint = await resolve_checkpoint(a1111, preset["model"])
+        model_meta = get_model_meta(preset["model"])
+        await a1111.load_checkpoint(checkpoint)
         positive_prompt = merge_prompt(preset["base_positive"], prompt or "")
         payload = {
             "init_images": [b64_input],
@@ -71,6 +76,7 @@ async def create_variations(
             "batch_size": num_variations,
             "seed": -1,
         }
+        payload = add_model_override(payload, checkpoint, model_meta.get("clip_skip"))
         b64_list, seed = await a1111.img2img(payload)
         output_bytes_list = [a1111.decode_image(b) for b in b64_list]
         await save_job_images(
@@ -78,5 +84,5 @@ async def create_variations(
             input_file_path=file_path, input_filename=filename, seed=seed
         )
 
-    background_tasks.add_task(run_job, job_id, task, a1111.get_progress, a1111.offload_unused_models)
+    background_tasks.add_task(run_job, job_id, task, a1111.get_progress)
     return JobResponse(job_id=job_id, status="pending")

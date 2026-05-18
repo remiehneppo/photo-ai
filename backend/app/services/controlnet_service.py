@@ -35,12 +35,14 @@ CONTROLNET_MODES = {
         "module": "scribble_hed",
         "model_keyword": "scribble",
         "processor_res": 512,
+        "fallback_modes": ["edges"],
     },
     "lineart": {
         "label": "Lineart / Anime",
         "module": "lineart_anime",
         "model_keyword": "lineart",
         "processor_res": 512,
+        "fallback_modes": ["scribble", "edges"],
     },
 }
 
@@ -55,27 +57,28 @@ async def build_controlnet_scripts(
         raise ValueError(f"Invalid ControlNet mode. Choose from: {list(CONTROLNET_MODES)}")
 
     models = await a1111_client.get_controlnet_models()
-    model = _select_model(models, CONTROLNET_MODES[mode]["model_keyword"])
+    mode_config = _select_mode_config(models, mode)
+    model = _select_model(models, mode_config["model_keyword"])
     if not model:
         raise RuntimeError(f"Missing ControlNet model for mode: {mode}")
 
     unit = {
         "enabled": True,
         "image": image_b64,
-        "module": CONTROLNET_MODES[mode]["module"],
+        "module": mode_config["module"],
         "model": model,
         "weight": min(2.0, max(0.0, weight)),
         "resize_mode": "Crop and Resize",
-        "processor_res": CONTROLNET_MODES[mode]["processor_res"],
+        "processor_res": mode_config["processor_res"],
         "guidance_start": 0.0,
         "guidance_end": 1.0,
         "pixel_perfect": True,
         "control_mode": "Balanced",
     }
-    if "threshold_a" in CONTROLNET_MODES[mode]:
-        unit["threshold_a"] = CONTROLNET_MODES[mode]["threshold_a"]
-    if "threshold_b" in CONTROLNET_MODES[mode]:
-        unit["threshold_b"] = CONTROLNET_MODES[mode]["threshold_b"]
+    if "threshold_a" in mode_config:
+        unit["threshold_a"] = mode_config["threshold_a"]
+    if "threshold_b" in mode_config:
+        unit["threshold_b"] = mode_config["threshold_b"]
 
     return {
         "ControlNet": {
@@ -96,3 +99,16 @@ def _select_model(models: list[str], keyword: str) -> str | None:
         if keyword.lower() in model.lower():
             return model
     return None
+
+
+def _select_mode_config(models: list[str], mode: str) -> dict[str, Any]:
+    config = CONTROLNET_MODES[mode]
+    if _select_model(models, config["model_keyword"]):
+        return config
+
+    for fallback_mode in config.get("fallback_modes", []):
+        fallback_config = CONTROLNET_MODES[fallback_mode]
+        if _select_model(models, fallback_config["model_keyword"]):
+            return fallback_config
+
+    return config

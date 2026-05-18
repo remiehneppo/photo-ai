@@ -40,6 +40,8 @@ class FakeAsyncClient:
             return Response(data={"model_list": ["control_v11p_sd15_canny"]})
         if url.endswith("/sam/heartbeat"):
             return Response(status_code=200, data={"message": "pong"})
+        if url.endswith("/sam/sam-model"):
+            return Response(data=["sam_vit_b_01ec64.pth"])
         return Response(data=[{"title": "model"}])
 
     async def post(self, url, json=None):
@@ -52,6 +54,8 @@ class FakeAsyncClient:
             return Response(data={"images": ["img"]})
         if url.endswith("/extra-single-image"):
             return Response(data={"image": "upscaled"})
+        if url.endswith("/extra-batch-images"):
+            return Response(data={"images": ["batch-a", {"image": "batch-b"}]})
         return Response(data={})
 
 
@@ -73,21 +77,46 @@ def test_a1111_client_calls_expected_endpoints(monkeypatch):
     images, _seed = asyncio.run(client.img2img({"prompt": "x"}))
     assert images == ["img"]
     assert asyncio.run(client.upscale({"image": "x"})) == "upscaled"
+    assert asyncio.run(client.upscale_batch({"imageList": []})) == ["batch-a", "batch-b"]
     asyncio.run(client.offload_unused_models())
     assert asyncio.run(client.get_progress())["progress"] == 0.5
     assert asyncio.run(client.get_upscalers())[0]["name"] == "R-ESRGAN 4x+"
     assert asyncio.run(client.get_extensions())[0]["name"] == "sd-webui-controlnet"
     assert asyncio.run(client.get_controlnet_models()) == ["control_v11p_sd15_canny"]
     assert asyncio.run(client.sam_heartbeat()) is True
+    assert asyncio.run(client.get_sam_models()) == ["sam_vit_b_01ec64.pth"]
 
     assert ("POST", "http://a1111.local/sdapi/v1/options", {"sd_model_checkpoint": "model-a"}) in FakeAsyncClient.calls
     assert ("POST", "http://a1111.local/sdapi/v1/options", {"sd_model_checkpoint": "model-b"}) in FakeAsyncClient.calls
     assert ("POST", "http://a1111.local/sdapi/v1/reload-checkpoint", None) in FakeAsyncClient.calls
     assert ("POST", "http://a1111.local/sdapi/v1/unload-checkpoint", None) in FakeAsyncClient.calls
     assert ("POST", "http://a1111.local/sdapi/v1/txt2img", {"prompt": "x"}) in FakeAsyncClient.calls
+    assert ("GET", "http://a1111.local/sdapi/v1/sd-models", None) in FakeAsyncClient.calls
     assert ("GET", "http://a1111.local/sdapi/v1/progress?skip_current_image=true", None) in FakeAsyncClient.calls
     assert ("GET", "http://a1111.local/sdapi/v1/extensions", None) in FakeAsyncClient.calls
     assert ("GET", "http://a1111.local/controlnet/model_list", None) in FakeAsyncClient.calls
+    assert ("GET", "http://a1111.local/sam/sam-model", None) in FakeAsyncClient.calls
+
+
+def test_load_checkpoint_reuses_same_model_and_offloads_before_switch(monkeypatch):
+    import app.services.a1111_client as module
+
+    FakeAsyncClient.calls = []
+    monkeypatch.setattr(module.httpx, "AsyncClient", FakeAsyncClient)
+    client = A1111Client()
+    client.base_url = "http://a1111.local"
+
+    asyncio.run(client.load_checkpoint("model-a"))
+    asyncio.run(client.load_checkpoint("model-a"))
+    asyncio.run(client.load_checkpoint("model-b"))
+
+    set_calls = [call for call in FakeAsyncClient.calls if call[0] == "POST" and call[1].endswith("/sdapi/v1/options")]
+    unload_calls = [call for call in FakeAsyncClient.calls if call[0] == "POST" and call[1].endswith("/sdapi/v1/unload-checkpoint")]
+    assert set_calls == [
+        ("POST", "http://a1111.local/sdapi/v1/options", {"sd_model_checkpoint": "model-a"}),
+        ("POST", "http://a1111.local/sdapi/v1/options", {"sd_model_checkpoint": "model-b"}),
+    ]
+    assert unload_calls == [("POST", "http://a1111.local/sdapi/v1/unload-checkpoint", None)]
 
 
 def test_image_encoding_round_trip():

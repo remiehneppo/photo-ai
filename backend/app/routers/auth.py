@@ -56,12 +56,10 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
 @router.post("/login", response_model=TokenResponse)
 def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     identifier = form.username.strip()
-    normalized_identifier = identifier.lower()
-    password = form.password
     user = db.query(User).filter(
-        (func.lower(User.email) == normalized_identifier) | (User.username == identifier)
+        (func.lower(User.email) == identifier.lower()) | (User.username == identifier)
     ).first()
-    if not user or not verify_password(password, user.hashed_password):
+    if not user or not verify_password(form.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     token = create_access_token({"sub": user.id})
     return TokenResponse(access_token=token)

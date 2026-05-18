@@ -11,7 +11,7 @@ from app.services.adetailer_service import build_adetailer_scripts, has_adetaile
 from app.services.auth_service import get_current_user
 from app.services.controlnet_service import build_controlnet_scripts, merge_alwayson_scripts
 from app.services.job_service import create_job, run_job, save_job_images
-from app.services.model_service import add_model_override, resolve_checkpoint
+from app.services.model_service import add_model_override, resolve_checkpoint, resolve_controlnet_checkpoint
 from app.services.preset_service import available_styles, get_model_meta, get_preset, merge_prompt
 from app.services.upload_service import read_image_upload
 
@@ -126,7 +126,7 @@ async def generate(
             payload["seed"] = -1  # different seed for subsequent images
         await save_job_images(job_id, user_id, all_images, seed=last_seed)
 
-    background_tasks.add_task(run_job, job_id, task, a1111.get_progress, a1111.offload_unused_models)
+    background_tasks.add_task(run_job, job_id, task, a1111.get_progress)
     return JobResponse(job_id=job_id, status="pending")
 
 
@@ -175,7 +175,7 @@ async def generate_with_reference(
     user_id = current_user.id
 
     async def task():
-        checkpoint = await resolve_checkpoint(a1111, preset["model"])
+        checkpoint = await resolve_controlnet_checkpoint(a1111, preset["model"])
         model_meta = get_model_meta(preset["model"])
         await a1111.load_checkpoint(checkpoint)
         positive = merge_prompt(preset["base_positive"], prompt)
@@ -198,7 +198,7 @@ async def generate_with_reference(
         img_bytes = a1111.decode_image(images[0])
         await save_job_images(job_id, user_id, [img_bytes], seed=resolved_seed)
 
-    background_tasks.add_task(run_job, job_id, task, a1111.get_progress, a1111.offload_unused_models)
+    background_tasks.add_task(run_job, job_id, task, a1111.get_progress)
     return JobResponse(job_id=job_id, status="pending")
 
 

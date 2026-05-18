@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 export function PromptInput({
   value,
@@ -14,22 +14,16 @@ export function PromptInput({
   suggestions?: string[];
 }) {
   const [showDropdown, setShowDropdown] = useState(false);
-  const [filtered, setFiltered] = useState<string[]>([]);
   const wrapperRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
+  const filtered = useMemo(() => {
     const trimmed = value.trim();
     if (!trimmed || suggestions.length === 0) {
-      setFiltered([]);
-      setShowDropdown(false);
-      return;
+      return [];
     }
     const lower = trimmed.toLowerCase();
-    const matches = suggestions
+    return suggestions
       .filter((s) => s.toLowerCase().includes(lower) && s.toLowerCase() !== lower)
       .slice(0, 5);
-    setFiltered(matches);
-    setShowDropdown(matches.length > 0);
   }, [value, suggestions]);
 
   useEffect(() => {
@@ -46,12 +40,15 @@ export function PromptInput({
     <div ref={wrapperRef} className="relative">
       <textarea
         value={value}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(event) => {
+          onChange(event.target.value);
+          setShowDropdown(true);
+        }}
         onFocus={() => filtered.length > 0 && setShowDropdown(true)}
         placeholder={placeholder}
         className="focus-ring min-h-32 w-full resize-y rounded-md border border-line bg-white px-4 py-3 text-sm leading-6 text-ink placeholder:text-muted"
       />
-      {showDropdown && (
+      {showDropdown && filtered.length > 0 && (
         <ul className="absolute z-10 mt-1 w-full overflow-hidden rounded-md border border-line bg-white shadow-md">
           {filtered.map((suggestion, index) => (
             <li key={index}>

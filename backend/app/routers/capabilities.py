@@ -20,6 +20,7 @@ class CapabilityResponse(BaseModel):
     controlnet_models: list[str]
     adetailer_available: bool
     sam_available: bool
+    sam_models: list[str] = []
 
 
 @router.get("", response_model=CapabilityResponse)
@@ -40,6 +41,7 @@ async def _fetch_capabilities() -> CapabilityResponse:
     samplers: list[str] = []
     extensions: list[str] = []
     controlnet_models: list[str] = []
+    sam_models: list[str] = []
     sam_heartbeat = False
 
     try:
@@ -62,6 +64,7 @@ async def _fetch_capabilities() -> CapabilityResponse:
             controlnet_models=[],
             adetailer_available=False,
             sam_available=False,
+            sam_models=[],
         )
 
     controlnet_available = any("controlnet" in extension.lower() for extension in extensions)
@@ -76,6 +79,11 @@ async def _fetch_capabilities() -> CapabilityResponse:
     sam_available = "segment-anything" in extension_names or "inpaint-anything" in extension_names
     if sam_available:
         sam_heartbeat = await a1111.sam_heartbeat()
+        if sam_heartbeat:
+            try:
+                sam_models = await a1111.get_sam_models()
+            except Exception:
+                sam_models = []
 
     return CapabilityResponse(
         a1111_connected=True,
@@ -86,7 +94,8 @@ async def _fetch_capabilities() -> CapabilityResponse:
         controlnet_available=controlnet_available,
         controlnet_models=controlnet_models,
         adetailer_available=adetailer_available,
-        sam_available=sam_available and sam_heartbeat,
+        sam_available=sam_available and sam_heartbeat and bool(sam_models),
+        sam_models=sam_models,
     )
 
 

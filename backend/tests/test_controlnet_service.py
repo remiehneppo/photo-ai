@@ -20,6 +20,15 @@ def test_build_controlnet_scripts_selects_model_by_mode():
     assert unit["weight"] == 0.8
 
 
+def test_build_controlnet_scripts_falls_back_for_sketch_modes():
+    scripts = asyncio.run(build_controlnet_scripts(FakeA1111(), "encoded-reference", "lineart", 0.8))
+    unit = scripts["ControlNet"]["args"][0]
+
+    assert unit["module"] == "canny"
+    assert unit["model"] == "control_v11p_sd15_canny"
+    assert unit["threshold_a"] == 100
+
+
 def test_build_controlnet_scripts_reports_missing_mode_model():
     with pytest.raises(RuntimeError, match="Missing ControlNet model for mode: pose"):
         asyncio.run(build_controlnet_scripts(FakeA1111(), "encoded-reference", "pose", 0.8))

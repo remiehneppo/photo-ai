@@ -3,11 +3,13 @@ from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException, UploadFi
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.config import RESTORE_MAX_PIXELS
 from app.database import get_db
 from app.models.user import User
 from app.services.auth_service import get_current_user
 from app.services.preset_service import get_restore_preset, merge_prompt
 from app.services.a1111_client import a1111
+from app.services.image_utils import constrain_image_pixels
 from app.services.storage_service import save_upload
 from app.services.job_service import create_job, run_job, save_job_images
 from app.services.upload_service import read_image_upload
@@ -58,7 +60,7 @@ async def restore_photo(
             "codeformer_visibility": preset.get("codeformer_visibility", 0.0),
         }
         b64_upscaled = await a1111.upscale(upscale_payload)
-        upscaled_bytes = a1111.decode_image(b64_upscaled)
+        upscaled_bytes = constrain_image_pixels(a1111.decode_image(b64_upscaled), RESTORE_MAX_PIXELS)
 
         # Step 2: img2img denoise for cleanup
         checkpoint = await resolve_checkpoint(a1111, preset.get("model", "realismIllustriousBy_v55FP16"))
@@ -82,5 +84,5 @@ async def restore_photo(
         output_bytes = a1111.decode_image(b64_list[0])
         await save_job_images(job_id, user_id, [output_bytes], input_file_path=file_path, input_filename=filename, seed=seed)
 
-    background_tasks.add_task(run_job, job_id, task, a1111.get_progress, a1111.offload_unused_models)
+    background_tasks.add_task(run_job, job_id, task, a1111.get_progress)
     return JobResponse(job_id=job_id, status="pending")

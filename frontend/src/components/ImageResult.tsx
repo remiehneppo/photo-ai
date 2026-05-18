@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
 
-import { imageUrl } from "@/lib/api";
+import { fetchImageBlob } from "@/lib/api";
 import type { JobDetail } from "@/types";
-import { Copy, Download } from "lucide-react";
+import { Copy, Dices, Download } from "lucide-react";
 
 export function ImageResult({ job, onUseSeed }: { job: JobDetail | null; onUseSeed?: (seed: number) => void }) {
   const outputs = job?.images.filter((image) => image.type === "output" && image.url) ?? [];
@@ -12,14 +13,14 @@ export function ImageResult({ job, onUseSeed }: { job: JobDetail | null; onUseSe
 
   if (!job || outputs.length === 0) return null;
 
-  const beforeSrc = input ? imageUrl(input.url) : null;
+  const beforeSrc = input?.url ?? null;
   const beforeFilename = input?.filename || "before.png";
 
   return (
     <div className="grid gap-4">
       <div className="grid gap-4 lg:grid-cols-2">
         {outputs.map((image) => {
-          const afterSrc = imageUrl(image.url);
+          const afterSrc = image.url;
           const afterFilename = image.filename || "output.png";
           return beforeSrc ? (
             <ComparisonSlider key={image.id} before={beforeSrc} after={afterSrc} beforeFilename={beforeFilename} afterFilename={afterFilename} />
@@ -39,9 +40,9 @@ function ComparisonSlider({ before, after, beforeFilename, afterFilename }: { be
   return (
     <div className="relative select-none overflow-hidden rounded-md border border-line bg-white">
       <div className="relative" style={{ aspectRatio: "4/3" }}>
-        <img src={before} alt="Before" className="absolute inset-0 h-full w-full object-contain" />
-        <div className="absolute inset-0 overflow-hidden" style={{ clipPath: `inset(0 ${100 - split}% 0 0)` }}>
-          <img src={after} alt="After" className="absolute inset-0 h-full w-full object-contain" />
+        <AuthImage src={before} alt="Before" className="absolute inset-0 h-full w-full object-contain" />
+        <div className="absolute inset-0 overflow-hidden" style={{ clipPath: `inset(0 0 0 ${split}%)` }}>
+          <AuthImage src={after} alt="After" className="absolute inset-0 h-full w-full object-contain" />
         </div>
         <div className="pointer-events-none absolute inset-y-0 w-0.5 bg-white shadow" style={{ left: `${split}%` }}>
           <div className="absolute left-1/2 top-1/2 flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white text-xs font-bold shadow-md">⇔</div>
@@ -58,12 +59,12 @@ function ComparisonSlider({ before, after, beforeFilename, afterFilename }: { be
         />
       </div>
       <div className="flex justify-end gap-2 border-t border-line p-2">
-        <a href={before} download={beforeFilename} className="focus-ring flex items-center gap-1 rounded-md border border-line px-2 py-1.5 text-xs font-semibold hover:bg-panel">
+        <DownloadButton src={before} filename={beforeFilename} className="focus-ring flex items-center gap-1 rounded-md border border-line px-2 py-1.5 text-xs font-semibold hover:bg-panel">
           <Download className="h-3 w-3" /> Before
-        </a>
-        <a href={after} download={afterFilename} className="focus-ring flex items-center gap-1 rounded-md border border-line px-2 py-1.5 text-xs font-semibold hover:bg-panel">
+        </DownloadButton>
+        <DownloadButton src={after} filename={afterFilename} className="focus-ring flex items-center gap-1 rounded-md border border-line px-2 py-1.5 text-xs font-semibold hover:bg-panel">
           <Download className="h-3 w-3" /> After
-        </a>
+        </DownloadButton>
       </div>
     </div>
   );
@@ -74,12 +75,55 @@ function ImagePanel({ title, src, filename }: { title: string; src: string; file
     <figure className="rounded-md border border-line bg-white p-3">
       <div className="mb-3 flex items-center justify-between gap-3">
         <figcaption className="text-sm font-semibold">{title}</figcaption>
-        <a className="focus-ring rounded-md border border-line p-2 hover:bg-panel" href={src} download={filename} title="Download">
+        <DownloadButton className="focus-ring rounded-md border border-line p-2 hover:bg-panel" src={src} filename={filename} title="Download">
           <Download className="h-4 w-4" aria-hidden="true" />
-        </a>
+        </DownloadButton>
       </div>
-      <img src={src} alt={title} className="max-h-[520px] w-full rounded-md object-contain" />
+      <AuthImage src={src} alt={title} className="max-h-[520px] w-full rounded-md object-contain" />
     </figure>
+  );
+}
+
+function AuthImage({ src, alt, className }: { src: string; alt: string; className?: string }) {
+  const [objectUrl, setObjectUrl] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    let nextUrl = "";
+    fetchImageBlob(src)
+      .then((blob) => {
+        if (cancelled) return;
+        nextUrl = URL.createObjectURL(blob);
+        setObjectUrl(nextUrl);
+      })
+      .catch(() => {
+        if (!cancelled) setObjectUrl("");
+      });
+    return () => {
+      cancelled = true;
+      if (nextUrl) URL.revokeObjectURL(nextUrl);
+    };
+  }, [src]);
+
+  if (!objectUrl) return <div className={className} aria-label={alt} />;
+  return <img src={objectUrl} alt={alt} className={className} />;
+}
+
+function DownloadButton({ src, filename, className, title, children }: { src: string; filename: string; className?: string; title?: string; children: ReactNode }) {
+  async function download() {
+    const blob = await fetchImageBlob(src);
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(objectUrl);
+  }
+
+  return (
+    <button type="button" onClick={download} className={className} title={title}>
+      {children}
+    </button>
   );
 }
 
@@ -100,7 +144,7 @@ function SeedPanel({ seed, onUseSeed }: { seed: number; onUseSeed?: (seed: numbe
       </button>
       {onUseSeed && (
         <button type="button" onClick={() => onUseSeed(seed)} className="focus-ring inline-flex items-center gap-1 rounded-md border border-line px-2 py-1.5 text-xs font-semibold hover:bg-panel">
-          🎲 Use seed
+          <Dices className="h-3 w-3" /> Use seed
         </button>
       )}
     </div>

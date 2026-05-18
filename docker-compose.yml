@@ -3,13 +3,13 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: photoai
-      POSTGRES_USER: photoai
-      POSTGRES_PASSWORD: photoai123
+      POSTGRES_DB: ${POSTGRES_DB:-photoai}
+      POSTGRES_USER: ${POSTGRES_USER:-photoai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U photoai -d photoai"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-photoai} -d $${POSTGRES_DB:-photoai}"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -22,9 +22,9 @@ services:
       db:
         condition: service_healthy
     environment:
-      ENVIRONMENT: development
-      DATABASE_URL: postgresql://photoai:photoai123@db:5432/photoai
-      SECRET_KEY: dev-secret-key-change-me
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-photoai}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:-photoai}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
       ALGORITHM: HS256
       ACCESS_TOKEN_EXPIRE_MINUTES: "10080"
       A1111_BASE_URL: ${A1111_BASE_URL:-http://host.docker.internal:7860}
@@ -35,6 +35,7 @@ services:
       MAX_UPLOAD_BYTES: "12582912"
       MAX_IMAGE_PIXELS: "16000000"
       OUTPAINT_MAX_PIXELS: "786432"
+      RESTORE_MAX_PIXELS: "1048576"
     command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     volumes:
       - ./storage:/storage
@@ -52,7 +53,7 @@ services:
     build:
       context: ./frontend
       args:
-        NEXT_PUBLIC_API_BASE_URL: https://photo-be.suprenam.id.vn
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-https://photo-be.suprenam.id.vn}
     restart: unless-stopped
     depends_on:
       backend:

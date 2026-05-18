@@ -12,7 +12,7 @@ from app.services.auth_service import get_current_user
 from app.services.controlnet_service import build_controlnet_scripts, merge_alwayson_scripts
 from app.services.image_utils import ensure_image_size, get_image_size
 from app.services.job_service import create_job, run_job, save_job_images
-from app.services.model_service import add_model_override, resolve_checkpoint
+from app.services.model_service import add_model_override, resolve_checkpoint, resolve_controlnet_checkpoint
 from app.services.preset_service import available_styles, get_model_meta, get_preset, merge_prompt
 from app.services.storage_service import save_upload
 from app.services.upload_service import read_image_upload
@@ -100,6 +100,8 @@ async def edit_image(
         # H1 – checkpoint override
         if checkpoint:
             resolved_checkpoint = checkpoint
+        elif controlnet:
+            resolved_checkpoint = await resolve_controlnet_checkpoint(a1111, preset["model"])
         else:
             resolved_checkpoint = await resolve_checkpoint(a1111, preset["model"])
         model_meta = get_model_meta(preset["model"])
@@ -131,5 +133,5 @@ async def edit_image(
         img_bytes = ensure_image_size(a1111.decode_image(images[0]), (source_width, source_height))
         await save_job_images(job_id, user_id, [img_bytes], input_file_path=file_path, input_filename=filename, seed=resolved_seed)
 
-    background_tasks.add_task(run_job, job_id, task, a1111.get_progress, a1111.offload_unused_models)
+    background_tasks.add_task(run_job, job_id, task, a1111.get_progress)
     return JobResponse(job_id=job_id, status="pending")

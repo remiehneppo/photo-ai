@@ -13,12 +13,12 @@ import { PromptInput } from "@/components/PromptInput";
 import { StyleSelector } from "@/components/StyleSelector";
 import { PromptSuggestions } from "@/components/PromptSuggestions";
 import { clearToken, getToken } from "@/lib/auth";
-import { backgroundReplace, backgroundSegment, createVariations, deleteJob, depthGuide, editImage, enhancePrompt, faceRestoreImage, generateImage, generateImageWithReference, getCapabilities, getSuggestions, getStyles, imageUrl, inpaintImage, interrogateImage, listJobs, me, outpaintImage, poseControl, restorePhoto, sharpenImage, sketchToPhoto, upscaleBatch, upscaleImage } from "@/lib/api";
+import { backgroundReplace, backgroundSegment, createVariations, deleteJob, depthGuide, editImage, enhancePrompt, faceRestoreImage, fetchImageBlob, generateImage, generateImageWithReference, getCapabilities, getSuggestions, getStyles, inpaintImage, interrogateImage, listJobs, me, outpaintImage, poseControl, restorePhoto, sharpenImage, sketchToPhoto, upscaleBatch, upscaleImage } from "@/lib/api";
 import type { Capabilities, ControlMode, Direction, HistoryImageTarget, ImageOut, JobDetail, Style, Suggestions, User } from "@/types";
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Brush, Clock3, Expand, ImageUp, Layers, Loader2, LogOut, PenTool, RefreshCw, SlidersHorizontal, Sparkles, Wand2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
-import { ChangeEvent, FormEvent, MouseEvent, useCallback, useEffect, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Toaster, toast } from "sonner";
 
 type Tab = "generate" | "edit" | "inpaint" | "upscale" | "batch_upscale" | "sharpen" | "outpaint" | "face_restore" | "variations" | "sketch" | "pose" | "depth" | "restore" | "background" | "history";
@@ -301,7 +301,7 @@ function GenerateTab({ capabilities, styles, suggestions }: { capabilities: Capa
         </ActionButton>
       </form>
       <div className="mt-5 grid gap-4">
-        <JobStatus jobId={jobId} onDone={(job) => { setResult(job); if (job) toast.success("Generation complete!"); }} />
+        <JobStatus key={jobId ?? "generate-idle"} jobId={jobId} onDone={(job) => { setResult(job); if (job) toast.success("Generation complete!"); }} />
         <ImageResult job={result} onUseSeed={(s) => setSeed(String(s))} />
       </div>
     </Panel>
@@ -426,7 +426,7 @@ function EditTab({ capabilities, styles, historyImageSeed, suggestions }: { capa
         </ActionButton>
       </form>
       <div className="mt-5 grid gap-4">
-        <JobStatus jobId={jobId} onDone={(job) => { setResult(job); if (job) toast.success("Edit complete!"); }} />
+        <JobStatus key={jobId ?? "edit-idle"} jobId={jobId} onDone={(job) => { setResult(job); if (job) toast.success("Edit complete!"); }} />
         <ImageResult job={result} onUseSeed={(s) => setSeed(String(s))} />
       </div>
     </Panel>
@@ -516,7 +516,7 @@ function InpaintTab({ styles, historyImageSeed, suggestions }: { styles: typeof 
         </ActionButton>
       </form>
       <div className="mt-5 grid gap-4">
-        <JobStatus jobId={jobId} onDone={setResult} />
+        <JobStatus key={jobId ?? "inpaint-idle"} jobId={jobId} onDone={setResult} />
         <ImageResult job={result} onUseSeed={(s) => setSeed(String(s))} />
       </div>
     </Panel>
@@ -583,7 +583,7 @@ function UpscaleTab({ historyImageSeed, capabilities }: { historyImageSeed: Hist
         </ActionButton>
       </form>
       <div className="mt-5 grid gap-4">
-        <JobStatus jobId={jobId} onDone={(job) => { setResult(job); if (job) toast.success("Upscale complete!"); }} />
+        <JobStatus key={jobId ?? "upscale-idle"} jobId={jobId} onDone={(job) => { setResult(job); if (job) toast.success("Upscale complete!"); }} />
         <ImageResult job={result} />
       </div>
     </Panel>
@@ -629,7 +629,7 @@ function SharpenTab({ historyImageSeed }: { historyImageSeed: HistoryImageSeed |
         </ActionButton>
       </form>
       <div className="mt-5 grid gap-4">
-        <JobStatus jobId={jobId} onDone={setResult} />
+        <JobStatus key={jobId ?? "sharpen-idle"} jobId={jobId} onDone={setResult} />
         <ImageResult job={result} />
       </div>
     </Panel>
@@ -767,7 +767,7 @@ function OutpaintTab({ capabilities, styles, historyImageSeed, suggestions }: { 
         </ActionButton>
       </form>
       <div className="mt-5 grid gap-4">
-        <JobStatus jobId={jobId} onDone={setResult} />
+        <JobStatus key={jobId ?? "outpaint-idle"} jobId={jobId} onDone={setResult} />
         <ImageResult job={result} onUseSeed={(s) => setSeed(String(s))} />
       </div>
     </Panel>
@@ -916,9 +916,7 @@ function HistoryTab({ onUseImage }: { onUseImage: (target: HistoryImageTarget, f
     setBusyImageId(image.id);
     setError("");
     try {
-      const response = await fetch(imageUrl(image.url));
-      if (!response.ok) throw new Error("Could not load image from history");
-      const blob = await response.blob();
+      const blob = await fetchImageBlob(image.url);
       const filename = image.filename || "history-image.png";
       onUseImage(target, new File([blob], filename, { type: blob.type || "image/png" }));
     } catch (err) {
@@ -1110,7 +1108,7 @@ function FaceRestoreTab() {
         </ActionButton>
       </form>
       <div className="mt-5 grid gap-4">
-        <JobStatus jobId={jobId} onDone={setResult} />
+        <JobStatus key={jobId ?? "face-restore-idle"} jobId={jobId} onDone={setResult} />
         <ImageResult job={result} />
       </div>
     </Panel>
@@ -1160,7 +1158,7 @@ function VariationsTab({ styles }: { styles: typeof fallbackStyles }) {
         </ActionButton>
       </form>
       <div className="mt-5 grid gap-4">
-        <JobStatus jobId={jobId} onDone={setResult} />
+        <JobStatus key={jobId ?? "variations-idle"} jobId={jobId} onDone={setResult} />
         <ImageResult job={result} />
       </div>
     </Panel>
@@ -1210,7 +1208,7 @@ function SketchToPhotoTab({ styles }: { styles: typeof fallbackStyles }) {
         </ActionButton>
       </form>
       <div className="mt-5 grid gap-4">
-        <JobStatus jobId={jobId} onDone={setResult} />
+        <JobStatus key={jobId ?? "sketch-idle"} jobId={jobId} onDone={setResult} />
         <ImageResult job={result} />
       </div>
     </Panel>
@@ -1256,7 +1254,7 @@ function PoseControlTab({ styles }: { styles: typeof fallbackStyles }) {
         </ActionButton>
       </form>
       <div className="mt-5 grid gap-4">
-        <JobStatus jobId={jobId} onDone={setResult} />
+        <JobStatus key={jobId ?? "pose-idle"} jobId={jobId} onDone={setResult} />
         <ImageResult job={result} />
       </div>
     </Panel>
@@ -1302,7 +1300,7 @@ function DepthGuideTab({ styles }: { styles: typeof fallbackStyles }) {
         </ActionButton>
       </form>
       <div className="mt-5 grid gap-4">
-        <JobStatus jobId={jobId} onDone={setResult} />
+        <JobStatus key={jobId ?? "depth-idle"} jobId={jobId} onDone={setResult} />
         <ImageResult job={result} />
       </div>
     </Panel>
@@ -1339,7 +1337,7 @@ function RestorePhotoTab() {
         </ActionButton>
       </form>
       <div className="mt-5 grid gap-4">
-        <JobStatus jobId={jobId} onDone={setResult} />
+        <JobStatus key={jobId ?? "restore-photo-idle"} jobId={jobId} onDone={setResult} />
         <ImageResult job={result} />
       </div>
     </Panel>
@@ -1405,7 +1403,7 @@ function BatchUpscaleTab() {
         </ActionButton>
       </form>
       <div className="mt-5 grid gap-4">
-        <JobStatus jobId={jobId} onDone={(job) => { setResult(job); if (job) toast.success("Batch upscale complete!"); }} />
+        <JobStatus key={jobId ?? "batch-upscale-idle"} jobId={jobId} onDone={(job) => { setResult(job); if (job) toast.success("Batch upscale complete!"); }} />
         <ImageResult job={result} />
       </div>
     </Panel>
@@ -1423,13 +1421,14 @@ function BackgroundTab({ styles, capabilities }: { styles: typeof fallbackStyles
   const [result, setResult] = useState<JobDetail | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const previewRef = useRef<HTMLDivElement>(null);
+  const [previewSize, setPreviewSize] = useState<{ width: number; height: number } | null>(null);
   const samAvailable = capabilities?.sam_available ?? false;
 
   function handleImageClick(event: MouseEvent<HTMLImageElement>) {
     const rect = event.currentTarget.getBoundingClientRect();
     const naturalW = event.currentTarget.naturalWidth;
     const naturalH = event.currentTarget.naturalHeight;
+    setPreviewSize({ width: naturalW, height: naturalH });
     const scaleX = naturalW / rect.width;
     const scaleY = naturalH / rect.height;
     const x = (event.clientX - rect.left) * scaleX;
@@ -1467,7 +1466,11 @@ function BackgroundTab({ styles, capabilities }: { styles: typeof fallbackStyles
     } finally { setLoading(false); }
   }
 
-  const previewUrl = file ? URL.createObjectURL(file) : null;
+  const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
+  useEffect(() => {
+    if (!previewUrl) return;
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [previewUrl]);
 
   return (
     <Panel title="Background Remove & Replace">
@@ -1478,21 +1481,25 @@ function BackgroundTab({ styles, capabilities }: { styles: typeof fallbackStyles
       )}
       <p className="mb-4 text-sm text-muted">Upload an image, click on the subject to segment it, then describe the new background.</p>
       <div className="grid gap-4">
-        <ImageUpload file={file} onChange={(f) => { setFile(f); setClickPoint(null); setMaskB64(null); }} />
+        <ImageUpload file={file} onChange={(f) => { setFile(f); setClickPoint(null); setMaskB64(null); setPreviewSize(null); }} />
         {previewUrl && (
-          <div ref={previewRef}>
+          <div>
             <p className="mb-1.5 text-sm font-semibold text-ink">Click on the subject to select it</p>
             <div className="relative inline-block w-full overflow-hidden rounded-md border border-line">
               <img
                 src={previewUrl}
                 alt="Preview"
                 className="w-full cursor-crosshair object-contain"
+                onLoad={(event) => setPreviewSize({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })}
                 onClick={handleImageClick}
               />
               {clickPoint && (
                 <div
                   className="pointer-events-none absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-accent"
-                  style={{ left: `${(clickPoint.x / (previewRef.current?.querySelector("img")?.naturalWidth ?? 1)) * 100}%`, top: `${(clickPoint.y / (previewRef.current?.querySelector("img")?.naturalHeight ?? 1)) * 100}%` }}
+                  style={{
+                    left: `${(clickPoint.x / (previewSize?.width ?? 1)) * 100}%`,
+                    top: `${(clickPoint.y / (previewSize?.height ?? 1)) * 100}%`
+                  }}
                 />
               )}
             </div>
@@ -1524,7 +1531,7 @@ function BackgroundTab({ styles, capabilities }: { styles: typeof fallbackStyles
           </ActionButton>
         </form>
         <div className="grid gap-4">
-          <JobStatus jobId={jobId} onDone={(job) => { setResult(job); if (job) toast.success("Background replaced!"); }} />
+          <JobStatus key={jobId ?? "background-idle"} jobId={jobId} onDone={(job) => { setResult(job); if (job) toast.success("Background replaced!"); }} />
           <ImageResult job={result} />
         </div>
       </div>

@@ -3,7 +3,7 @@
 import { cancelJob, getJob } from "@/lib/api";
 import type { JobDetail, JobStatus as JobStatusType } from "@/types";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export function JobStatus({
   jobId,
@@ -15,36 +15,48 @@ export function JobStatus({
   const [job, setJob] = useState<JobDetail | null>(null);
   const [error, setError] = useState("");
   const [cancelling, setCancelling] = useState(false);
+  const onDoneRef = useRef(onDone);
+  const completedJobIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    onDoneRef.current = onDone;
+  }, [onDone]);
 
   useEffect(() => {
     if (!jobId) {
+      completedJobIdRef.current = null;
       return;
     }
 
     const activeJobId = jobId;
+    completedJobIdRef.current = null;
     let cancelled = false;
+    let timeoutId: number | null = null;
     async function poll() {
       try {
         const next = await getJob(activeJobId);
         if (cancelled) return;
         setJob(next);
-        if (next.status === "done") onDone?.(next);
+        if (next.status === "done" && completedJobIdRef.current !== activeJobId) {
+          completedJobIdRef.current = activeJobId;
+          onDoneRef.current?.(next);
+        }
         if (next.status === "pending" || next.status === "processing") {
-          window.setTimeout(poll, 1800);
+          timeoutId = window.setTimeout(poll, 1800);
         }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Could not load job status");
       }
     }
 
-    setJob(null);
-    setError("");
-    setCancelling(false);
     poll();
     return () => {
       cancelled = true;
+      if (timeoutId != null) {
+        window.clearTimeout(timeoutId);
+      }
     };
-  }, [jobId, onDone]);
+  }, [jobId]);
 
   if (!jobId) return null;
 

@@ -14,7 +14,7 @@ from app.services.storage_service import save_upload
 from app.services.job_service import create_job, run_job, save_job_images
 from app.services.upload_service import read_image_upload
 from app.services.controlnet_service import build_controlnet_scripts
-from app.services.model_service import add_model_override, resolve_checkpoint
+from app.services.model_service import add_model_override, resolve_controlnet_checkpoint
 
 router = APIRouter(prefix="/api/pose-control", tags=["pose_control"])
 
@@ -60,7 +60,7 @@ async def pose_control(
     b64_input = a1111.encode_image(image_bytes)
 
     async def task():
-        checkpoint = await resolve_checkpoint(a1111, preset["model"])
+        checkpoint = await resolve_controlnet_checkpoint(a1111, preset["model"])
         model_meta = get_model_meta(preset["model"])
         await a1111.load_checkpoint(checkpoint)
         positive = merge_prompt(preset["base_positive"], prompt)
@@ -81,5 +81,5 @@ async def pose_control(
         img_bytes = a1111.decode_image(images[0])
         await save_job_images(job_id, user_id, [img_bytes], input_file_path=file_path, input_filename=filename, seed=out_seed)
 
-    background_tasks.add_task(run_job, job_id, task, a1111.get_progress, a1111.offload_unused_models)
+    background_tasks.add_task(run_job, job_id, task, a1111.get_progress)
     return JobResponse(job_id=job_id, status="pending")

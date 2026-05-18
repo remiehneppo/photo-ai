@@ -65,6 +65,18 @@ export function imageUrl(url: string) {
   return `${API_BASE}${url}`;
 }
 
+export async function fetchImageBlob(url: string) {
+  const token = getToken();
+  const headers = new Headers();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const response = await fetch(imageUrl(url), { headers, cache: "no-store" });
+  if (response.status === 401) clearToken();
+  if (!response.ok) {
+    throw new Error(await readError(response));
+  }
+  return response.blob();
+}
+
 export async function register(payload: { email: string; username: string; password: string }) {
   const normalized = {
     email: payload.email.trim().toLowerCase(),
@@ -353,4 +365,3 @@ export function backgroundReplace(payload: { image: File; mask_b64: string; back
   fd.append("style", payload.style ?? "realistic");
   return request<{ job_id: string; status: string }>("/api/background/replace", { method: "POST", body: fd });
 }
-

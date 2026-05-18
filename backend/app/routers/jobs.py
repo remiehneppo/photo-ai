@@ -160,10 +160,10 @@ async def stream_job_progress(
     async def event_generator() -> AsyncGenerator[str, None]:
         while True:
             db.expire_all()
-            j = db.query(Job).filter(Job.id == job_id).first()
+            j = db.query(Job).filter(Job.id == job_id, Job.user_id == current_user.id).first()
             if j is None:
                 break
-            images = db.query(Image).filter(Image.job_id == j.id).all()
+            images = db.query(Image).filter(Image.job_id == j.id, Image.user_id == current_user.id).all()
             detail = _build_job_detail(j, db, images)
             data = detail.model_dump(mode="json")
             yield f"data: {json.dumps(data)}\n\n"

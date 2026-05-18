@@ -61,6 +61,9 @@ class FakeA1111:
     async def get_controlnet_models(self):
         return ["control_v11p_sd15_canny"]
 
+    async def get_sam_models(self):
+        return ["sam_vit_b_01ec64.pth"]
+
     async def load_checkpoint(self, model_name: str) -> None:
         pass
 
@@ -538,6 +541,7 @@ def test_capabilities_route_reports_a1111_features(monkeypatch):
     assert result.controlnet_models == ["control_v11p_sd15_canny"]
     assert result.adetailer_available is True
     assert result.sam_available is True
+    assert result.sam_models == ["sam_vit_b_01ec64.pth"]
 
 
 # ── Phase G tests ──────────────────────────────────────────────────────────────

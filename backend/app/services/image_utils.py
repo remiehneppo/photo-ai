@@ -30,6 +30,25 @@ def ensure_image_size(image_bytes: bytes, target_size: tuple[int, int]) -> bytes
         return image_bytes
 
 
+def constrain_image_pixels(image_bytes: bytes, max_pixels: int) -> bytes:
+    """Downscale an image to fit a max pixel budget, preserving aspect ratio."""
+    if max_pixels <= 0:
+        return image_bytes
+    try:
+        with PILImage.open(BytesIO(image_bytes)) as img:
+            width, height = img.size
+            if width * height <= max_pixels:
+                return image_bytes
+            scale = (max_pixels / float(width * height)) ** 0.5
+            target = (max(64, int(width * scale)), max(64, int(height * scale)))
+            resized = img.resize(target, PILImage.Resampling.LANCZOS)
+            output = BytesIO()
+            resized.save(output, format="PNG")
+            return output.getvalue()
+    except UnidentifiedImageError:
+        return image_bytes
+
+
 def to_grayscale_png(image_bytes: bytes) -> bytes:
     """Convert image to grayscale PNG (for masks). Returns original bytes if conversion fails."""
     try:

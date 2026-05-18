@@ -5,20 +5,17 @@ import uuid
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
 from app.config import STORAGE_PATH
-from app.database import Base, engine, SessionLocal
+from app.database import SessionLocal
 from app.logging_config import configure_logging
-from app.models import Image, Job, User
-from app.routers import auth, background, capabilities, depth_guide, edit, face_restore, generate, inpaint, interrogate, jobs, outpaint, pose_control, restore, sharpen, sketch_to_photo, suggestions, upscale, variations
+from app.models import Job
+from app.routers import auth, background, capabilities, depth_guide, edit, face_restore, generate, images, inpaint, interrogate, jobs, outpaint, pose_control, restore, sharpen, sketch_to_photo, suggestions, upscale, variations
 
 configure_logging()
 logger = logging.getLogger("photo_ai.api")
-
-Base.metadata.create_all(bind=engine)
 
 
 def _cleanup_stale_jobs() -> None:
@@ -39,9 +36,12 @@ def _cleanup_stale_jobs() -> None:
         db.close()
 
 
-_cleanup_stale_jobs()
-
 app = FastAPI(title="Photo AI API", version="1.0.0")
+
+
+@app.on_event("startup")
+def startup_cleanup() -> None:
+    _cleanup_stale_jobs()
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
@@ -90,6 +90,19 @@ class NoStoreImagesMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(NoStoreImagesMiddleware)
 
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        return response
+
+
+app.add_middleware(SecurityHeadersMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -119,6 +132,7 @@ app.include_router(interrogate.router)
 app.include_router(upscale.router)
 app.include_router(sharpen.router)
 app.include_router(outpaint.router)
+app.include_router(images.router)
 app.include_router(jobs.router)
 app.include_router(suggestions.router)
 app.include_router(face_restore.router)
@@ -131,8 +145,6 @@ app.include_router(background.router)
 
 os.makedirs(f"{STORAGE_PATH}/input", exist_ok=True)
 os.makedirs(f"{STORAGE_PATH}/output", exist_ok=True)
-app.mount("/api/images/input", StaticFiles(directory=f"{STORAGE_PATH}/input"), name="input-images")
-app.mount("/api/images/output", StaticFiles(directory=f"{STORAGE_PATH}/output"), name="output-images")
 
 
 @app.get("/health")

@@ -21,6 +21,31 @@ async def resolve_checkpoint(a1111_client, preferred: str) -> str:
     return match
 
 
+async def resolve_controlnet_checkpoint(a1111_client, preferred: str) -> str:
+    """Resolve a checkpoint compatible with the installed ControlNet models."""
+    raw_models = await a1111_client.get_models()
+    candidates = [_model_name(model) for model in raw_models]
+    match = select_checkpoint(candidates, preferred)
+    if not match:
+        available = ", ".join(candidates) or "none"
+        raise RuntimeError(f"Checkpoint '{preferred}' is not available in A1111. Available: {available}")
+
+    try:
+        controlnet_models = await a1111_client.get_controlnet_models()
+    except Exception:
+        return match
+
+    if not _requires_sd15_controlnet(controlnet_models) or _looks_like_sd15_checkpoint(match):
+        return match
+
+    for fallback in ("chilloutmix_NiPrunedFp32Fix", "v1-5-pruned-emaonly", "v15PrunedEmaonly_v15PrunedEmaonly", "anything-v5"):
+        fallback_match = select_checkpoint(candidates, fallback)
+        if fallback_match and _looks_like_sd15_checkpoint(fallback_match):
+            return fallback_match
+
+    return match
+
+
 def select_checkpoint(candidates: list[str], preferred: str) -> str | None:
     if not preferred:
         return None
@@ -62,3 +87,14 @@ def _shared_prefix_len(left: str, right: str) -> int:
             break
         count += 1
     return count
+
+
+def _requires_sd15_controlnet(models: list[str]) -> bool:
+    return any("sd15" in model.lower() or "sd1" in model.lower() for model in models)
+
+
+def _looks_like_sd15_checkpoint(model_name: str) -> bool:
+    normalized = _normalize(model_name)
+    if "xl" in normalized or "illustrious" in normalized or "juggernaut" in normalized:
+        return False
+    return any(token in normalized for token in ("v15", "v1-5", "prunedemaonly", "chilloutmix", "anythingv5"))

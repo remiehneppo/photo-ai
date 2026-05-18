@@ -168,6 +168,28 @@ def test_a1111_job_runs_prepare_before_task(monkeypatch):
     assert job.status == "done"
 
 
+def test_a1111_job_runs_cleanup_after_task(monkeypatch):
+    session_factory = make_session_factory()
+    seed_job(session_factory)
+    monkeypatch.setattr(job_service, "SessionLocal", session_factory)
+    events = []
+
+    async def progress():
+        return {}
+
+    async def cleanup():
+        events.append("cleanup")
+
+    async def task():
+        events.append("task")
+
+    asyncio.run(job_service.run_job("job-1", task, progress, cleanup_provider=cleanup))
+
+    job = get_job(session_factory)
+    assert events == ["task", "cleanup"]
+    assert job.status == "done"
+
+
 def test_a1111_job_continues_when_prepare_fails(monkeypatch):
     session_factory = make_session_factory()
     seed_job(session_factory)
