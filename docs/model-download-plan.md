@@ -43,6 +43,28 @@ The backend currently contains a fallback that moves ControlNet jobs to an SD1.5
 
 Install these first.
 
+### Download Table
+
+Use these paths for the local A1111 install at `$HOME/AI/stable-diffusion-webui`.
+
+| Priority | File | Direct download | Put in A1111 folder | Used by |
+| --- | --- | --- | --- | --- |
+| P0 | `realisticVisionV60B1_v30VAE-inpainting.safetensors` | https://civitai.com/api/download/models/105723?type=Model&format=SafeTensor | `models/Stable-diffusion/` | photoreal inpaint, outpaint, background replace, restore cleanup |
+| P0 | `sd-v1-5-inpainting.ckpt` | https://huggingface.co/runwayml/stable-diffusion-inpainting/resolve/main/sd-v1-5-inpainting.ckpt | `models/Stable-diffusion/` | generic SD1.5 inpaint fallback |
+| P0 | `counterfeitV30Fp16_30Inpaint.safetensors` | https://civitai.com/api/download/models/137911?type=Model&format=SafeTensor | `models/Stable-diffusion/` | anime inpaint/outpaint |
+| P0 | `juggernautXL_versionXInpaint.safetensors` | https://civitai.com/api/download/models/456538?type=Model&format=SafeTensor | `models/Stable-diffusion/` | SDXL advertisement/product inpaint/outpaint |
+| P0 | `dreamshaper_8Inpainting.safetensors` | https://civitai.com/api/download/models/128713?type=Model&format=SafeTensor | `models/Stable-diffusion/` | artistic/creative inpaint/outpaint |
+| P0 | `control_v11p_sd15_scribble.pth` | https://huggingface.co/lllyasviel/ControlNet-v1-1/resolve/main/control_v11p_sd15_scribble.pth | `extensions/sd-webui-controlnet/models/` | freehand sketch control |
+| P0 | `control_v11p_sd15_lineart.pth` | https://huggingface.co/lllyasviel/ControlNet-v1-1/resolve/main/control_v11p_sd15_lineart.pth | `extensions/sd-webui-controlnet/models/` | clean lineart control |
+| P0 | `control_v11p_sd15s2_lineart_anime.pth` | https://huggingface.co/lllyasviel/ControlNet-v1-1/resolve/main/control_v11p_sd15s2_lineart_anime.pth | `extensions/sd-webui-controlnet/models/` | anime/manga lineart control |
+| P0 | `realisticVisionV60B1_v60B1VAE.safetensors` | https://civitai.com/api/download/models/245598?type=Model&format=SafeTensor | `models/Stable-diffusion/` | general SD1.5 photoreal ControlNet flows |
+| P0 | `sam_vit_h_4b8939.pth` | https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth | `models/sam/` | best-quality SAM masks |
+| P1 | `sam_vit_l_0b3195.pth` | https://dl.fbaipublicfiles.com/segment_anything/sam_vit_l_0b3195.pth | `models/sam/` | medium-memory SAM masks |
+| P1 | `controlnet-union-sdxl-1.0` files | https://huggingface.co/xinsir/controlnet-union-sdxl-1.0/tree/main | `extensions/sd-webui-controlnet/models/` | SDXL Canny/Depth/OpenPose/Inpaint/Tile control |
+| P1 | `RealVisXL V5.0` checkpoint | https://civitai.green/models/139562/realvisxl-v50 | `models/Stable-diffusion/` | optional high-quality SDXL photoreal generation |
+
+After downloading checkpoint or ControlNet files, restart A1111 or use the UI refresh button for checkpoints/ControlNet models. CivitAI API links may require a browser session or API token depending on the model's current access policy.
+
 #### Dedicated Inpainting/Outpainting Checkpoints
 
 Download into:
