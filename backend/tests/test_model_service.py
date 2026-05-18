@@ -1,6 +1,6 @@
 import asyncio
 
-from app.services.model_service import add_model_override, resolve_controlnet_checkpoint, select_checkpoint
+from app.services.model_service import add_model_override, resolve_checkpoint, resolve_controlnet_checkpoint, select_checkpoint
 
 
 class FakeControlNetA1111:
@@ -25,6 +25,22 @@ def test_select_checkpoint_matches_config_model_names():
     assert select_checkpoint(candidates, "anything-v5") == "anything-v5"
     assert select_checkpoint(candidates, "juggernautXL_v9Rdphoto2Lightning") == "Juggernaut-XL_v9_RunDiffusionPhoto_v2"
     assert select_checkpoint(candidates, "missing") is None
+
+
+def test_resolve_checkpoint_uses_first_available_preferred_model():
+    class FakeA1111:
+        async def get_models(self):
+            return [
+                {"model_name": "v1-5-pruned-emaonly"},
+                {"model_name": "realisticVisionV60B1_v30VAE-inpainting"},
+            ]
+
+    checkpoint = asyncio.run(resolve_checkpoint(
+        FakeA1111(),
+        ["missing-specialized-inpaint", "realisticVisionV60B1_v30VAE-inpainting", "v1-5-pruned-emaonly"],
+    ))
+
+    assert checkpoint == "realisticVisionV60B1_v30VAE-inpainting"
 
 
 def test_add_model_override_sets_per_request_checkpoint():

@@ -317,21 +317,30 @@ presets:
 
   restore:
     default:
-      model: realismIllustriousBy_v55FP16
-      upscaler_1: R-ESRGAN 4x+
+      model: realisticVisionV60B1_v30VAE-inpainting
+      model_candidates:
+        - realisticVisionV60B1_v30VAE-inpainting
+        - sd-v1-5-inpainting
+        - v1-5-pruned-emaonly
+      upscaler_1: SwinIR 4x
       upscaling_resize: 4
-      gfpgan_visibility: 0.7
-      codeformer_visibility: 0.0
-      denoising_strength: 0.3
+      gfpgan_visibility: 0.0
+      codeformer_visibility: 0.8
+      codeformer_weight: 0.35
+      denoising_strength: 0.24
       steps: 25
-      cfg_scale: 7
+      cfg_scale: 5.5
       sampler_name: DPM++ 2M Karras
-      base_positive: "(masterpiece, best quality:1.2), restored photograph, enhanced, sharp, clean, detailed, 4K, professional restoration"
-      base_negative: "(worst quality, low quality:1.4), nsfw, scratches, noise, grain, blur, damage, artifact, faded, sepia, deteriorated, torn"
+      base_positive: "restored archival photograph, faithful identity, natural skin texture, repaired scratches, clean paper texture, balanced contrast, realistic detail, preserved original composition"
+      base_negative: "(worst quality, low quality:1.4), nsfw, changed identity, over-smoothed face, plastic skin, hallucinated details, scratches, noise, grain, blur, damage, artifact, torn, watermark, text"
 
   outpaint:
     realistic:
-      model: realismIllustriousBy_v55FP16
+      model: realisticVisionV60B1_v30VAE-inpainting
+      model_candidates:
+        - realisticVisionV60B1_v30VAE-inpainting
+        - sd-v1-5-inpainting
+        - v1-5-pruned-emaonly
       denoising_strength: 0.85
       steps: 35
       cfg_scale: 7
@@ -341,7 +350,11 @@ presets:
       base_negative: "(worst quality, low quality:1.4), nsfw, bad anatomy, text, watermark, blurry, abrupt edge, inconsistent lighting, seam, duplicate"
 
     anime:
-      model: anything-v5
+      model: counterfeitV30Fp16_30Inpaint
+      model_candidates:
+        - counterfeitV30Fp16_30Inpaint
+        - Counterfeit_V3-inpainting
+        - anything-v5
       denoising_strength: 0.85
       steps: 20
       cfg_scale: 7
@@ -351,7 +364,10 @@ presets:
       base_negative: "(worst quality, low quality, normal quality:1.3), nsfw, bad anatomy, text, watermark, blurry, inconsistent, abrupt edge, color"
 
     advertisement:
-      model: Juggernaut-XL_v9_RunDiffusionPhoto_v2
+      model: juggernautXL_versionXInpaint
+      model_candidates:
+        - juggernautXL_versionXInpaint
+        - Juggernaut-XL_v9_RunDiffusionPhoto_v2
       denoising_strength: 0.85
       steps: 35
       cfg_scale: 7
@@ -361,7 +377,11 @@ presets:
       base_negative: "(worst quality, low quality:2), nsfw, blurry, inconsistent lighting, abrupt edge, seam, text, watermark, cartoon, deformed"
 
     portrait:
-      model: realismIllustriousBy_v55FP16
+      model: realisticVisionV60B1_v30VAE-inpainting
+      model_candidates:
+        - realisticVisionV60B1_v30VAE-inpainting
+        - sd-v1-5-inpainting
+        - chilloutmix_NiPrunedFp32Fix
       denoising_strength: 0.8
       steps: 30
       cfg_scale: 7
@@ -371,7 +391,12 @@ presets:
       base_negative: "(worst quality, low quality:1.4), nsfw, bad anatomy, text, watermark, blurry, abrupt edge, inconsistent skin, seam"
 
     artistic:
-      model: v1-5-pruned-emaonly
+      model: dreamshaper_8Inpainting
+      model_candidates:
+        - dreamshaper_8Inpainting
+        - dreamshaper_8
+        - sd-v1-5-inpainting
+        - v1-5-pruned-emaonly
       denoising_strength: 0.85
       steps: 30
       cfg_scale: 7.5
@@ -381,7 +406,11 @@ presets:
       base_negative: "(worst quality, low quality:1.4), nsfw, bad anatomy, text, watermark, blurry, abrupt edge, inconsistent style, seam"
 
     natural:
-      model: chilloutmix_NiPrunedFp32Fix
+      model: realisticVisionV60B1_v30VAE-inpainting
+      model_candidates:
+        - realisticVisionV60B1_v30VAE-inpainting
+        - sd-v1-5-inpainting
+        - chilloutmix_NiPrunedFp32Fix
       denoising_strength: 0.85
       steps: 25
       cfg_scale: 7
@@ -392,7 +421,11 @@ presets:
 
   inpaint:
     realistic:
-      model: realismIllustriousBy_v55FP16
+      model: realisticVisionV60B1_v30VAE-inpainting
+      model_candidates:
+        - realisticVisionV60B1_v30VAE-inpainting
+        - sd-v1-5-inpainting
+        - v1-5-pruned-emaonly
       denoising_strength: 0.75
       steps: 30
       cfg_scale: 7
@@ -403,7 +436,11 @@ presets:
       base_negative: "(worst quality, low quality:1.4), nsfw, bad anatomy, bad hands, extra fingers, text, watermark, blurry, deformed, seam, inconsistent lighting"
 
     anime:
-      model: anything-v5
+      model: counterfeitV30Fp16_30Inpaint
+      model_candidates:
+        - counterfeitV30Fp16_30Inpaint
+        - Counterfeit_V3-inpainting
+        - anything-v5
       denoising_strength: 0.75
       steps: 20
       cfg_scale: 7
@@ -414,7 +451,10 @@ presets:
       base_negative: "(worst quality, low quality, normal quality:1.3), nsfw, bad anatomy, text, watermark, blurry, realistic, color, seam"
 
     advertisement:
-      model: Juggernaut-XL_v9_RunDiffusionPhoto_v2
+      model: juggernautXL_versionXInpaint
+      model_candidates:
+        - juggernautXL_versionXInpaint
+        - Juggernaut-XL_v9_RunDiffusionPhoto_v2
       denoising_strength: 0.75
       steps: 30
       cfg_scale: 7
@@ -425,7 +465,11 @@ presets:
       base_negative: "(worst quality, low quality:2), nsfw, blurry, grainy, text, watermark, cartoon, deformed, seam"
 
     portrait:
-      model: realismIllustriousBy_v55FP16
+      model: realisticVisionV60B1_v30VAE-inpainting
+      model_candidates:
+        - realisticVisionV60B1_v30VAE-inpainting
+        - sd-v1-5-inpainting
+        - chilloutmix_NiPrunedFp32Fix
       denoising_strength: 0.75
       steps: 30
       cfg_scale: 7
@@ -436,7 +480,12 @@ presets:
       base_negative: "(worst quality, low quality:1.4), nsfw, bad anatomy, bad hands, extra fingers, text, watermark, blurry, cartoon, deformed, seam"
 
     artistic:
-      model: v1-5-pruned-emaonly
+      model: dreamshaper_8Inpainting
+      model_candidates:
+        - dreamshaper_8Inpainting
+        - dreamshaper_8
+        - sd-v1-5-inpainting
+        - v1-5-pruned-emaonly
       denoising_strength: 0.75
       steps: 30
       cfg_scale: 7.5
@@ -447,7 +496,11 @@ presets:
       base_negative: "(worst quality, low quality:1.4), nsfw, bad anatomy, text, watermark, blurry, deformed, seam, style inconsistency"
 
     natural:
-      model: chilloutmix_NiPrunedFp32Fix
+      model: realisticVisionV60B1_v30VAE-inpainting
+      model_candidates:
+        - realisticVisionV60B1_v30VAE-inpainting
+        - sd-v1-5-inpainting
+        - chilloutmix_NiPrunedFp32Fix
       denoising_strength: 0.75
       steps: 25
       cfg_scale: 7
@@ -459,12 +512,54 @@ presets:
 
 # Model metadata
 models:
-  realismIllustriousBy_v55FP16:
+  realisticVisionV60B1_v30VAE-inpainting:
     sd_version: "1.5"
-    default_width: 768
+    default_width: 512
+    default_height: 768
+    # Dedicated photoreal SD1.5 inpainting/outpainting checkpoint. Prefer over general photo checkpoints for masked edits.
+    clip_skip: 1
+  sd-v1-5-inpainting:
+    sd_version: "1.5"
+    default_width: 512
+    default_height: 512
+    # Official SD1.5 inpainting baseline. Safe fallback for generic masked edits when a style-tuned inpaint model is missing.
+    clip_skip: 1
+  counterfeitV30Fp16_30Inpaint:
+    sd_version: "1.5"
+    default_width: 512
+    default_height: 768
+    # Anime inpainting checkpoint; keeps linework/style continuity better than a plain anime txt2img checkpoint.
+    clip_skip: 2
+  Counterfeit_V3-inpainting:
+    sd_version: "1.5"
+    default_width: 512
+    default_height: 768
+    # Alternate filename used by common Counterfeit V3 inpainting downloads.
+    clip_skip: 2
+  juggernautXL_versionXInpaint:
+    sd_version: "XL"
+    default_width: 1024
     default_height: 1024
-    # Merge of Illustrious + realism LoRAs. Strong photorealism, portrait-focused.
-    # Key triggers: RAW photo, natural skin texture, realistic eyes
+    # Dedicated Juggernaut XL inpainting/outpainting checkpoint for commercial/product/background expansion.
+    clip_skip: 1
+  dreamshaper_8Inpainting:
+    sd_version: "1.5"
+    default_width: 512
+    default_height: 768
+    # General creative SD1.5 inpainting checkpoint for art, concept, watercolor, and painterly repairs.
+    clip_skip: 1
+  dreamshaper_8:
+    sd_version: "1.5"
+    default_width: 512
+    default_height: 768
+    # Creative fallback when the inpainting variant is not installed.
+    clip_skip: 1
+  realismIllustriousBy_v55FP16:
+    sd_version: "XL"
+    default_width: 1024
+    default_height: 1024
+    # Illustrious-derived realistic checkpoint. Do not use with SD1.5 ControlNet or as a generic inpaint/outpaint default.
+    # Key triggers: RAW photo, natural skin texture, realistic eyes.
     clip_skip: 2
   v1-5-pruned-emaonly:
     sd_version: "1.5"

@@ -28,6 +28,15 @@ def test_upscale_preset_and_model_metadata():
     assert missing_model == {"sd_version": "1.5"}
 
 
+def test_restore_preset_uses_specialized_restoration_defaults():
+    preset = preset_service.get_restore_preset("default")
+
+    assert preset["model_candidates"][0] == "realisticVisionV60B1_v30VAE-inpainting"
+    assert preset["upscaler_1"] == "SwinIR 4x"
+    assert preset["codeformer_visibility"] == 0.8
+    assert preset["gfpgan_visibility"] == 0.0
+
+
 def test_unknown_upscale_mode_is_rejected():
     with pytest.raises(ValueError):
         preset_service.get_upscale_preset("missing")

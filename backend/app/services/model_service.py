@@ -11,14 +11,18 @@ def add_model_override(payload: dict[str, Any], checkpoint: str, clip_skip: int 
     return payload
 
 
-async def resolve_checkpoint(a1111_client, preferred: str) -> str:
+async def resolve_checkpoint(a1111_client, preferred: str | list[str]) -> str:
     models = await a1111_client.get_models()
     candidates = [_model_name(model) for model in models]
-    match = select_checkpoint(candidates, preferred)
-    if not match:
-        available = ", ".join(candidates) or "none"
-        raise RuntimeError(f"Checkpoint '{preferred}' is not available in A1111. Available: {available}")
-    return match
+    preferred_names = _preferred_names(preferred)
+    for preferred_name in preferred_names:
+        match = select_checkpoint(candidates, preferred_name)
+        if match:
+            return match
+
+    available = ", ".join(candidates) or "none"
+    requested = ", ".join(preferred_names) or "none"
+    raise RuntimeError(f"Checkpoint '{requested}' is not available in A1111. Available: {available}")
 
 
 async def resolve_controlnet_checkpoint(a1111_client, preferred: str) -> str:
@@ -69,6 +73,12 @@ def select_checkpoint(candidates: list[str], preferred: str) -> str | None:
             return candidate
 
     return None
+
+
+def _preferred_names(preferred: str | list[str]) -> list[str]:
+    if isinstance(preferred, list):
+        return [str(name) for name in preferred if str(name).strip()]
+    return [str(preferred)] if str(preferred).strip() else []
 
 
 def _model_name(model: dict[str, Any]) -> str:

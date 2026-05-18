@@ -68,8 +68,9 @@ async def inpaint_image(
     b64_mask = a1111.encode_image(mask_bytes)
 
     async def task():
-        checkpoint = await resolve_checkpoint(a1111, preset["model"])
-        model_meta = get_model_meta(preset["model"])
+        model_choice = preset.get("model_candidates", preset["model"])
+        checkpoint = await resolve_checkpoint(a1111, model_choice)
+        model_meta = get_model_meta(checkpoint)
         await a1111.load_checkpoint(checkpoint)
         positive = merge_prompt(preset["base_positive"], prompt)
         payload = {

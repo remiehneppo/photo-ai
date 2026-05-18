@@ -58,13 +58,15 @@ async def restore_photo(
             "upscaling_resize": preset.get("upscaling_resize", 4),
             "gfpgan_visibility": preset.get("gfpgan_visibility", 0.7),
             "codeformer_visibility": preset.get("codeformer_visibility", 0.0),
+            "codeformer_weight": preset.get("codeformer_weight", 0.5),
         }
         b64_upscaled = await a1111.upscale(upscale_payload)
         upscaled_bytes = constrain_image_pixels(a1111.decode_image(b64_upscaled), RESTORE_MAX_PIXELS)
 
         # Step 2: img2img denoise for cleanup
-        checkpoint = await resolve_checkpoint(a1111, preset.get("model", "realismIllustriousBy_v55FP16"))
-        model_meta = get_model_meta(preset.get("model", "realismIllustriousBy_v55FP16"))
+        model_choice = preset.get("model_candidates", preset.get("model", "realisticVisionV60B1_v30VAE-inpainting"))
+        checkpoint = await resolve_checkpoint(a1111, model_choice)
+        model_meta = get_model_meta(checkpoint)
         await a1111.load_checkpoint(checkpoint)
 
         positive = merge_prompt(preset.get("base_positive", ""), "")

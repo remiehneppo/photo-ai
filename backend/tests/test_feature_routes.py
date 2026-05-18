@@ -423,7 +423,7 @@ def test_outpaint_route_builds_mask_payload(monkeypatch):
     assert fake.payloads[0][1]["mask"] == "encoded-input"
     assert fake.payloads[0][1]["width"] > 0
     assert fake.payloads[0][1]["height"] > 0
-    assert fake.payloads[0][1]["override_settings"]["sd_model_checkpoint"] == "realismIllustriousBy_v55FP16"
+    assert fake.payloads[0][1]["override_settings"]["sd_model_checkpoint"] == "v1-5-pruned-emaonly"
 
 
 def test_jobs_route_returns_current_user_history():

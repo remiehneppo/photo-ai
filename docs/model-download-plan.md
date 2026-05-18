@@ -43,6 +43,35 @@ The backend currently contains a fallback that moves ControlNet jobs to an SD1.5
 
 Install these first.
 
+#### Dedicated Inpainting/Outpainting Checkpoints
+
+Download into:
+
+```text
+$HOME/AI/stable-diffusion-webui/models/Stable-diffusion/
+```
+
+Backend now prefers these names in `backend/app/presets/config.yaml`:
+
+- Photoreal inpaint/outpaint/restore/background replacement: `realisticVisionV60B1_v30VAE-inpainting.safetensors`
+- Official generic fallback: `sd-v1-5-inpainting.safetensors`
+- Anime inpaint/outpaint: `counterfeitV30Fp16_30Inpaint.safetensors`
+- SDXL advertisement/product inpaint/outpaint: `juggernautXL_versionXInpaint.safetensors`
+- Creative/artistic inpaint/outpaint: `dreamshaper_8Inpainting.safetensors`
+
+Why:
+
+- Inpaint/outpaint jobs need an inpainting-trained UNet/checkpoint to blend masked regions and canvas extensions.
+- Plain txt2img/img2img checkpoints can work, but they more often produce seams, bad masked-region coherence, or style drift.
+- The config keeps fallback candidates for the current local machine, but those fallbacks are compatibility paths, not the recommended quality path.
+
+References:
+
+- https://huggingface.co/runwayml/stable-diffusion-inpainting
+- https://civitaiarchive.com/models/4201?modelVersionId=105723
+- https://civitaiarchive.com/models/115569?modelVersionId=137911
+- https://civitaiarchive.com/models/403361/juggernaut-xl-inpainting
+
 #### Missing SD1.5 ControlNet Sketch Models
 
 Download into:
@@ -175,13 +204,14 @@ Existing upscalers are enough for now. Suggested defaults:
 - General photo: `R-ESRGAN 4x+`
 - Sharper web/social output: `4x-UltraSharp`
 - Anime/manga: `R-ESRGAN 4x+ Anime6B`
-- Old photo restoration: `R-ESRGAN 4x+` or `SwinIR 4x`
+- Old photo restoration: `SwinIR 4x` plus CodeFormer, with Real-ESRGAN as fallback
 
 Avoid making `4x-UltraSharp` the universal default because it can introduce halos or harsh edges on old photos.
 
 Reference:
 
 - https://github.com/xinntao/Real-ESRGAN
+- https://arxiv.org/abs/2108.10257
 
 ## Recommended Backend Mapping
 
@@ -211,6 +241,16 @@ Reference:
   - clean illustration linework: Lineart
 - `background replace`, `inpaint`, `outpaint`: use inpaint-capable checkpoint family and matching inpaint ControlNet where possible.
 
+### Inpaint, Outpaint, Background Replace, Restore
+
+Backend priority is now:
+
+- `realistic`, `portrait`, `natural`, `background replace`, `restore`: `realisticVisionV60B1_v30VAE-inpainting`, then `sd-v1-5-inpainting`, then an installed SD1.5 fallback.
+- `anime`: `counterfeitV30Fp16_30Inpaint`, then `Counterfeit_V3-inpainting`, then `anything-v5`.
+- `advertisement`: `juggernautXL_versionXInpaint`, then `Juggernaut-XL_v9_RunDiffusionPhoto_v2`.
+- `artistic`: `dreamshaper_8Inpainting`, then `dreamshaper_8`, then `sd-v1-5-inpainting`, then `v1-5-pruned-emaonly`.
+- `restore`: use `SwinIR` + `CodeFormer` before low-denoise img2img cleanup. Avoid using GFPGAN as the default restoration path because it changes identity more aggressively.
+
 ### Face And Hand Repair
 
 Current ADetailer config is acceptable:
@@ -225,7 +265,7 @@ Keep denoise conservative:
 
 ## Follow-Up Backend Improvements
 
-After downloading models, update backend model selection instead of relying on name-based fallbacks:
+After downloading models, continue improving backend model selection:
 
 - Add explicit `sd_version` to each preset and checkpoint.
 - Add separate config keys for:

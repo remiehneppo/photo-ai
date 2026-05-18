@@ -112,8 +112,9 @@ async def replace_background(
     b64_input = a1111.encode_image(image_bytes)
 
     async def task():
-        checkpoint = await resolve_checkpoint(a1111, preset.get("model", "realismIllustriousBy_v55FP16"))
-        model_meta = get_model_meta(preset.get("model", "realismIllustriousBy_v55FP16"))
+        model_choice = preset.get("model_candidates", preset.get("model", "realisticVisionV60B1_v30VAE-inpainting"))
+        checkpoint = await resolve_checkpoint(a1111, model_choice)
+        model_meta = get_model_meta(checkpoint)
         await a1111.load_checkpoint(checkpoint)
         positive = merge_prompt(preset.get("base_positive", ""), background_prompt)
         payload = {
