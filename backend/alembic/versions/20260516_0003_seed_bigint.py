@@ -17,8 +17,20 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    inspector = sa.inspect(op.get_bind())
+    if "jobs" not in inspector.get_table_names():
+        return
+    existing = {column["name"] for column in inspector.get_columns("jobs")}
+    if "seed" not in existing:
+        return
     op.alter_column("jobs", "seed", type_=sa.BigInteger(), existing_type=sa.Integer(), existing_nullable=True)
 
 
 def downgrade() -> None:
+    inspector = sa.inspect(op.get_bind())
+    if "jobs" not in inspector.get_table_names():
+        return
+    existing = {column["name"] for column in inspector.get_columns("jobs")}
+    if "seed" not in existing:
+        return
     op.alter_column("jobs", "seed", type_=sa.Integer(), existing_type=sa.BigInteger(), existing_nullable=True)

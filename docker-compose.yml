@@ -36,7 +36,21 @@ services:
       MAX_IMAGE_PIXELS: "16000000"
       OUTPAINT_MAX_PIXELS: "786432"
       RESTORE_MAX_PIXELS: "1048576"
-    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    command: |
+      sh -c 'python -c "
+      import socket, time
+      deadline = time.time() + 60
+      last = None
+      while time.time() < deadline:
+          try:
+              socket.create_connection((\"db\", 5432), timeout=2).close()
+              break
+          except OSError as exc:
+              last = exc
+              time.sleep(1)
+      else:
+          raise last
+      " && alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000'
     volumes:
       - ./storage:/storage
     ports:
