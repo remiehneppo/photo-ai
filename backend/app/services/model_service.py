@@ -25,7 +25,7 @@ async def resolve_checkpoint(a1111_client, preferred: str | list[str]) -> str:
     raise RuntimeError(f"Checkpoint '{requested}' is not available in A1111. Available: {available}")
 
 
-async def resolve_controlnet_checkpoint(a1111_client, preferred: str) -> str:
+async def resolve_controlnet_checkpoint(a1111_client, preferred: str, controlnet_keyword: str | None = None) -> str:
     """Resolve a checkpoint compatible with the installed ControlNet models."""
     raw_models = await a1111_client.get_models()
     candidates = [_model_name(model) for model in raw_models]
@@ -39,18 +39,35 @@ async def resolve_controlnet_checkpoint(a1111_client, preferred: str) -> str:
     except Exception:
         return match
 
+    if (
+        controlnet_keyword
+        and _looks_like_sdxl_checkpoint(match)
+        and _has_sd15_mode_controlnet(controlnet_models, controlnet_keyword)
+        and not _has_sdxl_mode_controlnet(controlnet_models, controlnet_keyword)
+    ):
+        fallback = _sd15_fallback(candidates)
+        if fallback:
+            return fallback
+
     if _looks_like_sdxl_checkpoint(match) and _has_sdxl_controlnet(controlnet_models):
         return match
 
     if not _requires_sd15_controlnet(controlnet_models) or _looks_like_sd15_checkpoint(match):
         return match
 
+    fallback = _sd15_fallback(candidates)
+    if fallback:
+        return fallback
+
+    return match
+
+
+def _sd15_fallback(candidates: list[str]) -> str | None:
     for fallback in ("chilloutmix_NiPrunedFp32Fix", "v1-5-pruned-emaonly", "v15PrunedEmaonly_v15PrunedEmaonly", "anything-v5"):
         fallback_match = select_checkpoint(candidates, fallback)
         if fallback_match and _looks_like_sd15_checkpoint(fallback_match):
             return fallback_match
-
-    return match
+    return None
 
 
 def select_checkpoint(candidates: list[str], preferred: str) -> str | None:
@@ -108,6 +125,19 @@ def _requires_sd15_controlnet(models: list[str]) -> bool:
 
 def _has_sdxl_controlnet(models: list[str]) -> bool:
     return any("sdxl" in model.lower() or "union" in model.lower() or "_xl" in model.lower() or "-xl" in model.lower() for model in models)
+
+
+def _has_sd15_mode_controlnet(models: list[str], keyword: str) -> bool:
+    return any(keyword.lower() in model.lower() and ("sd15" in model.lower() or "sd1" in model.lower()) for model in models)
+
+
+def _has_sdxl_mode_controlnet(models: list[str], keyword: str) -> bool:
+    return any(keyword.lower() in model.lower() and _looks_like_sdxl_controlnet_name(model) for model in models)
+
+
+def _looks_like_sdxl_controlnet_name(model: str) -> bool:
+    lowered = model.lower()
+    return "sdxl" in lowered or "_xl" in lowered or "-xl" in lowered
 
 
 def _looks_like_sd15_checkpoint(model_name: str) -> bool:

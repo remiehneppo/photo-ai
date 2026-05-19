@@ -132,15 +132,19 @@ class A1111Client:
     def _raise_for_status(response: httpx.Response, operation: str) -> None:
         try:
             response.raise_for_status()
-        except Exception:
+        except Exception as exc:
+            detail = _short_response_text(response)
             logger.exception(
                 "a1111_request_failed operation=%s status=%s url=%s response=%s",
                 operation,
                 getattr(response, "status_code", None),
                 getattr(response, "url", ""),
-                _short_response_text(response),
+                detail,
             )
-            raise
+            raise RuntimeError(
+                f"A1111 {operation} failed status={getattr(response, 'status_code', None)} "
+                f"url={getattr(response, 'url', '')} detail={detail}"
+            ) from exc
 
     async def get_upscalers(self) -> list[dict]:
         async with httpx.AsyncClient(timeout=10) as client:

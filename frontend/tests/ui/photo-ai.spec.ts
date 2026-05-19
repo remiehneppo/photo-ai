@@ -305,6 +305,24 @@ test("reference controls disable modes whose ControlNet model is missing", async
   await expect(page.getByRole("button", { name: "Product" })).toBeEnabled();
 });
 
+test("reference controls enable all modes when union controlnet model is present", async ({ page }) => {
+  await mockApi(page, {
+    controlnetModels: ["xinsir_controlnet_union_sdxl_1.0"]
+  });
+  await page.goto("/login");
+  await page.waitForLoadState("networkidle");
+  await page.getByLabel("Email or username").fill("creator");
+  await page.getByLabel("Password").fill(" password123 ");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+
+  await uploadImage(page);
+  await expect(page.getByRole("button", { name: "Edges" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /^Depth$/ })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /^Pose$/ })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Product" })).toBeEnabled();
+});
+
 test("upload workflows expose edit, upscale, sharpen, and expand controls without A1111", async ({ page }) => {
   await signIn(page);
 

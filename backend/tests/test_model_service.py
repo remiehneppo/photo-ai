@@ -67,7 +67,13 @@ def test_resolve_controlnet_checkpoint_uses_sd15_fallback_for_sd15_controlnet():
     assert checkpoint == "chilloutmix_NiPrunedFp32Fix"
 
 
-def test_resolve_controlnet_checkpoint_keeps_sdxl_when_sdxl_controlnet_exists():
+def test_resolve_controlnet_checkpoint_keeps_sdxl_when_no_mode_keyword_is_requested():
     checkpoint = asyncio.run(resolve_controlnet_checkpoint(FakeSdxlControlNetA1111(), "RealVisXL_V5.0_fp16"))
 
     assert checkpoint == "RealVisXL_V5.0_fp16"
+
+
+def test_resolve_controlnet_checkpoint_uses_sd15_for_mode_specific_controlnet():
+    checkpoint = asyncio.run(resolve_controlnet_checkpoint(FakeSdxlControlNetA1111(), "RealVisXL_V5.0_fp16", "canny"))
+
+    assert checkpoint == "chilloutmix_NiPrunedFp32Fix"

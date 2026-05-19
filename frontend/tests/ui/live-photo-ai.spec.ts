@@ -70,7 +70,7 @@ const allControlModes = [
   { value: "edges", label: "Edges", keyword: "canny" },
   { value: "depth", label: "Depth", keyword: "depth" },
   { value: "pose", label: "Pose", keyword: "openpose" },
-  { value: "product_layout", label: "Product", keyword: "canny" }
+  { value: "product_layout", label: "Product", keyword: "" }
 ] as const;
 const controlModes = LIVE_DEPTH === "full" ? allControlModes : allControlModes.slice(0, 1);
 const directions = (LIVE_DEPTH === "full" ? ["left", "right", "top", "bottom", "all"] : ["all"]) as const;
@@ -107,6 +107,13 @@ const report: {
   unexpected_console_errors: [],
   unexpected_network_errors: []
 };
+
+function supportsControlMode(capabilities: Capabilities, keyword: string): boolean {
+  if (!capabilities.controlnet_available) return false;
+  const hasUnion = capabilities.controlnet_models.some((model) => model.toLowerCase().includes("union"));
+  if (!keyword) return true;
+  return hasUnion || capabilities.controlnet_models.some((model) => model.toLowerCase().includes(keyword));
+}
 
 let currentCaseId = "setup";
 let allowCurrentNetworkErrors = false;
@@ -223,7 +230,7 @@ test("live browser matrix against real backend and A1111", async ({ page }, test
   await submitUpscaleSharpenMatrix(page, testInfo, capabilities);
   await submitExpandMatrix(page, testInfo, capabilities);
   await submitADetailerMatrix(page, testInfo, capabilities);
-  await submitAdditionalPanelMatrix(page, testInfo);
+  await submitAdditionalPanelMatrix(page, testInfo, capabilities);
   if (LIVE_RESOURCE_SOAK) {
     await submitResourceSoak(page, testInfo);
   }
@@ -257,7 +264,7 @@ async function submitGenerateMatrix(page: Page, testInfo: TestInfo, capabilities
 
 async function submitGenerateReferenceMatrix(page: Page, testInfo: TestInfo, capabilities: Capabilities) {
   for (const mode of controlModes) {
-    const hasModel = capabilities.controlnet_available && capabilities.controlnet_models.some((model) => model.toLowerCase().includes(mode.keyword));
+    const hasModel = supportsControlMode(capabilities, mode.keyword);
     if (!hasModel) {
       addSkip(`generate-reference-${mode.value}`, `Generate reference ${mode.value}`, "ControlNet job runs when model is available", `Missing ControlNet model containing "${mode.keyword}"`);
       continue;
@@ -289,7 +296,7 @@ async function submitEditMatrix(page: Page, testInfo: TestInfo, capabilities: Ca
   }
 
   for (const mode of controlModes) {
-    const hasModel = capabilities.controlnet_available && capabilities.controlnet_models.some((model) => model.toLowerCase().includes(mode.keyword));
+    const hasModel = supportsControlMode(capabilities, mode.keyword);
     if (!hasModel) {
       addSkip(`edit-reference-${mode.value}`, `Edit reference ${mode.value}`, "ControlNet edit runs when model is available", `Missing ControlNet model containing "${mode.keyword}"`);
       continue;
@@ -457,7 +464,7 @@ async function submitInpaintMatrix(page: Page, testInfo: TestInfo) {
   await rest();
 }
 
-async function submitAdditionalPanelMatrix(page: Page, testInfo: TestInfo) {
+async function submitAdditionalPanelMatrix(page: Page, testInfo: TestInfo, capabilities: Capabilities) {
   await runJobCase(page, testInfo, "face-restore-combined", "Restore faces", "Face restore job reaches terminal status", async () => {
     await selectTab(page, "Face Restore");
     await setFirstFileInput(page, "face-restore.png", "image/png", portraitPng);

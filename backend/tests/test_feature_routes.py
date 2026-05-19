@@ -60,7 +60,7 @@ class FakeA1111:
         return [{"name": "Euler a"}, {"name": "DPM++ 2M Karras"}]
 
     async def get_controlnet_models(self):
-        return ["control_v11p_sd15_canny", "xinsir_controlnet_union_sdxl_1.0"]
+        return ["control_v11p_sd15_canny", "control_v11p_sd15_openpose", "xinsir_controlnet_union_sdxl_1.0"]
 
     async def get_sam_models(self):
         return ["sam_vit_b_01ec64.pth"]
@@ -93,6 +93,19 @@ class FakeA1111:
     @staticmethod
     def encode_image(_value):
         return "encoded-input"
+
+
+class OOMOnceA1111(FakeA1111):
+    def __init__(self):
+        super().__init__()
+        self.calls = 0
+
+    async def txt2img(self, payload):
+        self.calls += 1
+        self.payloads.append(("txt2img", payload))
+        if self.calls == 1:
+            raise RuntimeError("CUDA out of memory. Tried to allocate 1024.00 MiB.")
+        return (["encoded-output"], None)
 
 
 class Upload:
@@ -276,8 +289,166 @@ def test_generate_with_reference_adds_controlnet_payload(monkeypatch):
     controlnet_unit = fake.payloads[0][1]["alwayson_scripts"]["ControlNet"]["args"][0]
     assert controlnet_unit["image"] == "encoded-input"
     assert controlnet_unit["module"] == "canny"
-    assert controlnet_unit["model"] == "xinsir_controlnet_union_sdxl_1.0"
-    assert controlnet_unit["weight"] == 0.8
+    assert controlnet_unit["model"] == "control_v11p_sd15_canny"
+    assert controlnet_unit["weight"] == 0.85
+    assert controlnet_unit["control_mode"] == "ControlNet is more important"
+    assert fake.payloads[0][1]["override_settings"]["sd_model_checkpoint"] == "v1-5-pruned-emaonly"
+
+
+def test_generate_with_reference_pose_uses_openpose_checkpoint_pair(monkeypatch):
+    factory = session_factory()
+    db = factory()
+    user = seed_user(db)
+    fake = FakeA1111()
+    patch_common(monkeypatch, generate, factory, fake)
+    tasks = CapturedTasks()
+
+    response = asyncio.run(call_and_run_tasks(
+        generate.generate_with_reference(
+            background_tasks=tasks,
+            prompt="dancer in red dress",
+            style="realistic",
+            control_mode="pose",
+            control_weight=0.7,
+            fix_face=False,
+            fix_hands=False,
+            control_image=Upload(),
+            db=db,
+            current_user=user,
+        ),
+        tasks,
+    ))
+
+    assert response.status == "pending"
+    controlnet_unit = fake.payloads[0][1]["alwayson_scripts"]["ControlNet"]["args"][0]
+    assert controlnet_unit["module"] == "openpose_full"
+    assert controlnet_unit["model"] == "control_v11p_sd15_openpose"
+    assert controlnet_unit["weight"] == 1.0
+    assert controlnet_unit["control_mode"] == "ControlNet is more important"
+    assert fake.payloads[0][1]["override_settings"]["sd_model_checkpoint"] == "v1-5-pruned-emaonly"
+
+
+def test_generate_with_reference_product_layout_adds_reference_and_structure_units(monkeypatch):
+    factory = session_factory()
+    db = factory()
+    user = seed_user(db)
+    fake = FakeA1111()
+    patch_common(monkeypatch, generate, factory, fake)
+    tasks = CapturedTasks()
+
+    response = asyncio.run(call_and_run_tasks(
+        generate.generate_with_reference(
+            background_tasks=tasks,
+            prompt="product hero shot on marble desk",
+            style="realistic",
+            control_mode="product_layout",
+            control_weight=0.6,
+            fix_face=False,
+            fix_hands=False,
+            control_image=Upload(),
+            db=db,
+            current_user=user,
+        ),
+        tasks,
+    ))
+
+    assert response.status == "pending"
+    reference_unit, structure_unit = fake.payloads[0][1]["alwayson_scripts"]["ControlNet"]["args"]
+    assert reference_unit["module"] == "reference_only"
+    assert reference_unit["model"] == "None"
+    assert reference_unit["control_mode"] == "Balanced"
+    assert reference_unit["guidance_end"] == 1.0
+    assert structure_unit["module"] == "canny"
+    assert structure_unit["model"] == "xinsir_controlnet_union_sdxl_1.0"
+    assert structure_unit["guidance_end"] == 0.85
+
+
+def test_generate_with_reference_anime_style_keeps_style_checkpoint(monkeypatch):
+    factory = session_factory()
+    db = factory()
+    user = seed_user(db)
+    fake = FakeA1111()
+    patch_common(monkeypatch, generate, factory, fake)
+    tasks = CapturedTasks()
+
+    response = asyncio.run(call_and_run_tasks(
+        generate.generate_with_reference(
+            background_tasks=tasks,
+            prompt="anime girl with raincoat",
+            style="anime",
+            control_mode="edges",
+            control_weight=0.7,
+            fix_face=False,
+            fix_hands=False,
+            control_image=Upload(),
+            db=db,
+            current_user=user,
+        ),
+        tasks,
+    ))
+
+    assert response.status == "pending"
+    payload = fake.payloads[0][1]
+    assert payload["override_settings"]["sd_model_checkpoint"] == "anything-v5"
+    assert payload["alwayson_scripts"]["ControlNet"]["args"][0]["module"] == "canny"
+
+
+def test_generate_route_retries_with_smaller_payload_after_oom(monkeypatch):
+    factory = session_factory()
+    db = factory()
+    user = seed_user(db)
+    fake = OOMOnceA1111()
+    patch_common(monkeypatch, generate, factory, fake)
+    tasks = CapturedTasks()
+
+    response = asyncio.run(call_and_run_tasks(
+        generate.generate(
+            req=generate.GenerateRequest(prompt="cinematic portrait", style="realistic"),
+            background_tasks=tasks,
+            db=db,
+            current_user=user,
+        ),
+        tasks,
+    ))
+
+    assert response.status == "pending"
+    assert len(fake.payloads) == 2
+    first = fake.payloads[0][1]
+    retry = fake.payloads[1][1]
+    assert retry["width"] < first["width"]
+    assert retry["height"] < first["height"]
+    assert retry["steps"] < first["steps"]
+
+
+def test_generate_with_reference_retries_with_smaller_payload_after_oom(monkeypatch):
+    factory = session_factory()
+    db = factory()
+    user = seed_user(db)
+    fake = OOMOnceA1111()
+    patch_common(monkeypatch, generate, factory, fake)
+    tasks = CapturedTasks()
+
+    response = asyncio.run(call_and_run_tasks(
+        generate.generate_with_reference(
+            background_tasks=tasks,
+            prompt="product hero shot",
+            style="realistic",
+            control_mode="product_layout",
+            control_weight=0.6,
+            control_image=Upload(),
+            db=db,
+            current_user=user,
+        ),
+        tasks,
+    ))
+
+    assert response.status == "pending"
+    assert len(fake.payloads) == 2
+    first = fake.payloads[0][1]
+    retry = fake.payloads[1][1]
+    assert retry["width"] < first["width"]
+    assert retry["height"] < first["height"]
+    assert retry["steps"] < first["steps"]
 
 
 def test_edit_route_saves_input_and_output(monkeypatch):
@@ -539,7 +710,7 @@ def test_capabilities_route_reports_a1111_features(monkeypatch):
     assert result.upscalers == ["R-ESRGAN 4x+", "4x-UltraSharp"]
     assert result.samplers == ["Euler a", "DPM++ 2M Karras"]
     assert result.controlnet_available is True
-    assert result.controlnet_models == ["control_v11p_sd15_canny", "xinsir_controlnet_union_sdxl_1.0"]
+    assert result.controlnet_models == ["control_v11p_sd15_canny", "control_v11p_sd15_openpose", "xinsir_controlnet_union_sdxl_1.0"]
     assert result.adetailer_available is True
     assert result.sam_available is True
     assert result.sam_models == ["sam_vit_b_01ec64.pth"]

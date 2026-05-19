@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
@@ -9,13 +10,14 @@ from app.models.user import User
 from app.services.a1111_client import a1111
 from app.services.adetailer_service import build_adetailer_scripts, has_adetailer
 from app.services.auth_service import get_current_user
-from app.services.controlnet_service import build_controlnet_scripts, merge_alwayson_scripts, validate_controlnet_mode
+from app.services.controlnet_service import CONTROLNET_MODES, build_controlnet_scripts, merge_alwayson_scripts, validate_controlnet_mode
 from app.services.job_service import create_job, run_job, save_job_images
 from app.services.model_service import add_model_override, resolve_checkpoint, resolve_controlnet_checkpoint
 from app.services.preset_service import available_styles, get_model_meta, get_preset, merge_prompt
 from app.services.upload_service import read_image_upload
 
 router = APIRouter(prefix="/api/generate", tags=["generate"])
+logger = logging.getLogger("photo_ai.generate")
 
 # Aspect ratio → (width, height) mapping
 ASPECT_RATIO_MAP: dict[str, tuple[int, int]] = {
@@ -118,12 +120,13 @@ async def generate(
         # G4 – batch
         all_images: list[bytes] = []
         last_seed = None
+        retry_payload = payload
         for _ in range(req.batch_count):
-            images, seed = await a1111.txt2img(payload)
+            images, seed, retry_payload = await _txt2img_with_oom_retry(a1111, retry_payload)
             all_images.append(a1111.decode_image(images[0]))
             if last_seed is None:
                 last_seed = seed
-            payload["seed"] = -1  # different seed for subsequent images
+            retry_payload["seed"] = -1  # different seed for subsequent images
         await save_job_images(job_id, user_id, all_images, seed=last_seed)
 
     background_tasks.add_task(run_job, job_id, task, a1111.get_progress)
@@ -173,7 +176,8 @@ async def generate_with_reference(
     user_id = current_user.id
 
     async def task():
-        checkpoint = await resolve_controlnet_checkpoint(a1111, preset["model"])
+        controlnet_keyword = CONTROLNET_MODES[control_mode].get("model_keyword")
+        checkpoint = await resolve_controlnet_checkpoint(a1111, preset["model"], controlnet_keyword)
         model_meta = get_model_meta(checkpoint)
         await a1111.load_checkpoint(checkpoint)
         controlnet = await build_controlnet_scripts(
@@ -199,7 +203,7 @@ async def generate_with_reference(
         if alwayson_scripts:
             payload["alwayson_scripts"] = alwayson_scripts
         payload = add_model_override(payload, checkpoint, model_meta.get("clip_skip"))
-        images, resolved_seed = await a1111.txt2img(payload)
+        images, resolved_seed, _ = await _txt2img_with_oom_retry(a1111, payload)
         img_bytes = a1111.decode_image(images[0])
         await save_job_images(job_id, user_id, [img_bytes], seed=resolved_seed)
 
@@ -241,3 +245,54 @@ def _resolve_dimensions(req: GenerateRequest, preset: dict) -> tuple[int, int]:
     if req.width and req.height:
         return int(req.width), int(req.height)
     return int(preset["width"]), int(preset["height"])
+
+
+async def _txt2img_with_oom_retry(a1111_client, payload: dict) -> tuple[list[str], int | None, dict]:
+    current_payload = payload
+    for _attempt in range(3):
+        try:
+            images, seed = await a1111_client.txt2img(current_payload)
+            return images, seed, current_payload
+        except Exception as exc:
+            if not _is_oom_error(exc):
+                raise
+            retry_payload = _build_oom_retry_payload(current_payload)
+            if retry_payload["width"] == current_payload["width"] and retry_payload["height"] == current_payload["height"]:
+                raise
+            logger.warning(
+                "txt2img_oom_retry width=%s height=%s steps=%s retry_width=%s retry_height=%s retry_steps=%s",
+                current_payload.get("width"),
+                current_payload.get("height"),
+                current_payload.get("steps"),
+                retry_payload.get("width"),
+                retry_payload.get("height"),
+                retry_payload.get("steps"),
+            )
+            current_payload = retry_payload
+    raise RuntimeError("txt2img failed after OOM retries")
+
+
+def _is_oom_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return "outofmemory" in message or "out of memory" in message or "cuda out of memory" in message
+
+
+def _build_oom_retry_payload(payload: dict) -> dict:
+    width = int(payload.get("width", 0) or 0)
+    height = int(payload.get("height", 0) or 0)
+    steps = int(payload.get("steps", 0) or 0)
+
+    retry = dict(payload)
+    if width > 0:
+        retry["width"] = _scale_dimension(width)
+    if height > 0:
+        retry["height"] = _scale_dimension(height)
+    if steps > 20:
+        retry["steps"] = max(20, int(steps * 0.75))
+    return retry
+
+
+def _scale_dimension(value: int) -> int:
+    reduced = int(value * 0.75)
+    aligned = max(384, (reduced // 64) * 64)
+    return min(value, aligned)

@@ -179,7 +179,7 @@ function GenerateTab({ capabilities, styles, suggestions }: { capabilities: Capa
   const [fixHands, setFixHands] = useState(false);
   const [controlImage, setControlImage] = useState<File | null>(null);
   const [controlMode, setControlMode] = useState<ControlMode>("edges");
-  const [controlWeight, setControlWeight] = useState(0.7);
+  const [controlWeight, setControlWeight] = useState(0.85);
   const [seed, setSeed] = useState("");
   const [aspectRatio, setAspectRatio] = useState<AspectRatio | null>(null);
   const [batchCount, setBatchCount] = useState<BatchCount>(1);
@@ -655,13 +655,16 @@ function ReferenceControl({
 }) {
   const controlnetModels = capabilities?.controlnet_models ?? [];
   const available = Boolean(capabilities?.controlnet_available && controlnetModels.length > 0);
-  const modes: Array<{ value: ControlMode; label: string; keyword: string }> = [
-    { value: "edges", label: "Edges", keyword: "canny" },
-    { value: "depth", label: "Depth", keyword: "depth" },
-    { value: "pose", label: "Pose", keyword: "openpose" },
-    { value: "product_layout", label: "Product", keyword: "canny" }
+  const modes: Array<{ value: ControlMode; label: string; keyword: string; recommendedWeight: number }> = [
+    { value: "edges", label: "Edges", keyword: "canny", recommendedWeight: 0.85 },
+    { value: "depth", label: "Depth", keyword: "depth", recommendedWeight: 0.9 },
+    { value: "pose", label: "Pose", keyword: "openpose", recommendedWeight: 1.0 },
+    { value: "product_layout", label: "Product", keyword: "", recommendedWeight: 0.85 }
   ];
-  const hasModeModel = (keyword: string) => controlnetModels.some((model) => model.toLowerCase().includes(keyword));
+  const hasUnionModel = controlnetModels.some((model) => model.toLowerCase().includes("union"));
+  const hasModeModel = (keyword: string) => (
+    controlnetModels.some((model) => model.toLowerCase().includes(keyword)) || hasUnionModel
+  );
 
   return (
     <div className="grid gap-3 rounded-md border border-line bg-white p-3">
@@ -681,13 +684,13 @@ function ReferenceControl({
           <ImageUpload file={file} onChange={onFile} />
           <div className="grid gap-2 sm:grid-cols-4">
             {modes.map((item) => {
-              const modeAvailable = hasModeModel(item.keyword);
+              const modeAvailable = item.keyword ? hasModeModel(item.keyword) : available;
               return (
                 <button
                   key={item.value}
                   type="button"
                   disabled={!modeAvailable}
-                  onClick={() => onMode(item.value)}
+                  onClick={() => { onMode(item.value); onWeight(item.recommendedWeight); }}
                   className={`focus-ring h-10 rounded-md border px-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-45 ${
                     mode === item.value ? "border-accent bg-accent text-white" : "border-line bg-white text-ink hover:bg-panel"
                   }`}
