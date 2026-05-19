@@ -43,6 +43,23 @@ The backend currently contains a fallback that moves ControlNet jobs to an SD1.5
 
 Install these first.
 
+### Automated Download
+
+Use the repo script to install the full required model set into a local A1111 checkout:
+
+```bash
+scripts/download-a1111-models.sh "$HOME/AI/stable-diffusion-webui"
+```
+
+Useful checks:
+
+```bash
+scripts/download-a1111-models.sh --check "$HOME/AI/stable-diffusion-webui"
+scripts/download-a1111-models.sh --dry-run "$HOME/AI/stable-diffusion-webui"
+```
+
+If CivitAI or Hugging Face gates a file, export `CIVITAI_TOKEN` or `HF_TOKEN` before running the script. The script saves each file under the A1111 folder expected by the backend and skips files that already exist.
+
 ### Download Table
 
 Use these paths for the local A1111 install at `$HOME/AI/stable-diffusion-webui`.
@@ -53,7 +70,7 @@ Use these paths for the local A1111 install at `$HOME/AI/stable-diffusion-webui`
 | P0 | `sd-v1-5-inpainting.ckpt` | https://huggingface.co/runwayml/stable-diffusion-inpainting/resolve/main/sd-v1-5-inpainting.ckpt | `models/Stable-diffusion/` | generic SD1.5 inpaint fallback |
 | P0 | `counterfeitV30Fp16_30Inpaint.safetensors` | https://civitai.com/api/download/models/137911?type=Model&format=SafeTensor | `models/Stable-diffusion/` | anime inpaint/outpaint |
 | P0 | `juggernautXL_versionXInpaint.safetensors` | https://civitai.com/api/download/models/456538?type=Model&format=SafeTensor | `models/Stable-diffusion/` | SDXL advertisement/product inpaint/outpaint |
-| P0 | `dreamshaper_8Inpainting.safetensors` | https://civitai.com/api/download/models/128713?type=Model&format=SafeTensor | `models/Stable-diffusion/` | artistic/creative inpaint/outpaint |
+| P0 | `dreamshaper_8Inpainting.safetensors` | https://civitai.com/api/download/models/131004?type=Model&format=SafeTensor | `models/Stable-diffusion/` | artistic/creative inpaint/outpaint |
 | P0 | `control_v11p_sd15_scribble.pth` | https://huggingface.co/lllyasviel/ControlNet-v1-1/resolve/main/control_v11p_sd15_scribble.pth | `extensions/sd-webui-controlnet/models/` | freehand sketch control |
 | P0 | `control_v11p_sd15_lineart.pth` | https://huggingface.co/lllyasviel/ControlNet-v1-1/resolve/main/control_v11p_sd15_lineart.pth | `extensions/sd-webui-controlnet/models/` | clean lineart control |
 | P0 | `control_v11p_sd15s2_lineart_anime.pth` | https://huggingface.co/lllyasviel/ControlNet-v1-1/resolve/main/control_v11p_sd15s2_lineart_anime.pth | `extensions/sd-webui-controlnet/models/` | anime/manga lineart control |
