@@ -1,14 +1,14 @@
 presets:
   txt2img:
     realistic:
-      model: realismIllustriousBy_v55FP16
-      steps: 30
-      cfg_scale: 7
-      sampler_name: DPM++ 2M Karras
-      width: 768
+      model: RealVisXL_V5.0_fp16
+      steps: 32
+      cfg_scale: 5.5
+      sampler_name: DPM++ SDE Karras
+      width: 1024
       height: 1024
-      # realismIllustriousBy v55: SD 1.5 photorealism model. RAW photo + natural skin texture key triggers.
-      # Structure: quality → medium → lighting → details (stable-diffusion-art.com/prompt-guide)
+      # RealVisXL V5.0: general SDXL photoreal checkpoint. RAW photo + natural skin texture key triggers.
+      # Structure: quality -> medium -> lighting -> details.
       base_positive: "(masterpiece, best quality:1.2), RAW photo, photorealistic, ultra-detailed, natural skin texture, realistic eyes, sharp focus, cinematic lighting, depth of field"
       base_negative: "(worst quality, low quality:1.4), nsfw, bad anatomy, bad hands, extra fingers, missing fingers, text, signature, watermark, blurry, deformed, jpeg artifacts, cropped, duplicate, ugly"
 
@@ -26,9 +26,9 @@ presets:
 
     advertisement:
       model: Juggernaut-XL_v9_RunDiffusionPhoto_v2
-      steps: 30
-      cfg_scale: 7
-      sampler_name: DPM++ 2M Karras
+      steps: 32
+      cfg_scale: 5.5
+      sampler_name: DPM++ SDE Karras
       width: 1024
       height: 1024
       # Juggernaut XL v9: SDXL model. Less quality-tag reliance (SDXL trained for quality by default).
@@ -37,12 +37,12 @@ presets:
       base_negative: "(worst quality, low quality:2), nsfw, amateur, blurry, grainy, noise, distortion, overexposed, underexposed, text, watermark, cartoon, painting, illustration, deformed"
 
     portrait:
-      model: realismIllustriousBy_v55FP16
-      steps: 30
-      cfg_scale: 7
-      sampler_name: DPM++ 2M Karras
-      width: 512
-      height: 768
+      model: RealVisXL_V5.0_fp16
+      steps: 32
+      cfg_scale: 5.5
+      sampler_name: DPM++ SDE Karras
+      width: 768
+      height: 1024
       # Close-up portrait — shallow DoF, catchlights, soft rim light key for portrait realism.
       base_positive: "(masterpiece, best quality:1.2), RAW photo, photorealistic, portrait, beautiful face, natural skin texture, detailed eyes with catchlights, soft rim lighting, shallow depth of field, sharp focus"
       base_negative: "(worst quality, low quality:1.4), nsfw, bad anatomy, bad hands, extra fingers, text, signature, watermark, blurry, cartoon, anime, painting, deformed, ugly, duplicate"
@@ -82,10 +82,10 @@ presets:
       base_negative: "(worst quality, low quality:1.4), nsfw, color, painted, photograph, realistic, 3d render, blurry, ugly, duplicate"
 
     vintage:
-      model: realismIllustriousBy_v55FP16
-      steps: 30
-      cfg_scale: 7
-      sampler_name: DPM++ 2M Karras
+      model: RealVisXL_V5.0_fp16
+      steps: 32
+      cfg_scale: 5.5
+      sampler_name: DPM++ SDE Karras
       width: 768
       height: 1024
       base_positive: "(masterpiece, best quality:1.2), vintage film photography, retro aesthetic, desaturated colors, film grain, vignette, faded tones, analog warmth, nostalgic"
@@ -102,10 +102,10 @@ presets:
       base_negative: "(worst quality, low quality:1.4), nsfw, color, flat lighting, low contrast, blurry, text, watermark, deformed, ugly"
 
     hdr:
-      model: realismIllustriousBy_v55FP16
-      steps: 30
-      cfg_scale: 7
-      sampler_name: DPM++ 2M Karras
+      model: RealVisXL_V5.0_fp16
+      steps: 32
+      cfg_scale: 5.5
+      sampler_name: DPM++ SDE Karras
       width: 768
       height: 1024
       base_positive: "(masterpiece, best quality:1.2), HDR photography, high dynamic range, vivid saturated colors, sharp, ultra-detailed, dramatic lighting, crisp edges, photorealistic"
@@ -133,11 +133,11 @@ presets:
 
   img2img:
     realistic:
-      model: realismIllustriousBy_v55FP16
-      denoising_strength: 0.55
-      steps: 30
-      cfg_scale: 7
-      sampler_name: DPM++ 2M Karras
+      model: RealVisXL_V5.0_fp16
+      denoising_strength: 0.45
+      steps: 32
+      cfg_scale: 5.5
+      sampler_name: DPM++ SDE Karras
       base_positive: "(masterpiece, best quality:1.2), RAW photo, photorealistic, ultra-detailed, natural skin texture, sharp focus, cinematic lighting"
       base_negative: "(worst quality, low quality:1.4), nsfw, bad anatomy, bad hands, extra fingers, text, watermark, blurry, deformed, jpeg artifacts, duplicate"
 
@@ -152,19 +152,19 @@ presets:
 
     advertisement:
       model: Juggernaut-XL_v9_RunDiffusionPhoto_v2
-      denoising_strength: 0.5
-      steps: 30
-      cfg_scale: 7
-      sampler_name: DPM++ 2M Karras
+      denoising_strength: 0.42
+      steps: 32
+      cfg_scale: 5.5
+      sampler_name: DPM++ SDE Karras
       base_positive: "commercial photography, product shot, professional studio lighting, sharp focus, highly detailed, photorealistic, crisp edges"
       base_negative: "(worst quality, low quality:2), nsfw, blurry, grainy, noise, text, watermark, cartoon, deformed, overexposed, underexposed"
 
     portrait:
-      model: realismIllustriousBy_v55FP16
-      denoising_strength: 0.5
-      steps: 30
-      cfg_scale: 7
-      sampler_name: DPM++ 2M Karras
+      model: RealVisXL_V5.0_fp16
+      denoising_strength: 0.4
+      steps: 32
+      cfg_scale: 5.5
+      sampler_name: DPM++ SDE Karras
       base_positive: "(masterpiece, best quality:1.2), RAW photo, photorealistic, portrait, beautiful face, natural skin texture, detailed eyes with catchlights, soft lighting, shallow depth of field"
       base_negative: "(worst quality, low quality:1.4), nsfw, bad anatomy, bad hands, extra fingers, text, watermark, blurry, cartoon, deformed, ugly"
 
@@ -196,11 +196,11 @@ presets:
       base_negative: "(worst quality, low quality:1.4), nsfw, color, painted, photograph, realistic, blurry, ugly, duplicate"
 
     vintage:
-      model: realismIllustriousBy_v55FP16
-      denoising_strength: 0.5
-      steps: 30
-      cfg_scale: 7
-      sampler_name: DPM++ 2M Karras
+      model: RealVisXL_V5.0_fp16
+      denoising_strength: 0.4
+      steps: 32
+      cfg_scale: 5.5
+      sampler_name: DPM++ SDE Karras
       base_positive: "(masterpiece, best quality:1.2), vintage film photography, retro aesthetic, desaturated colors, film grain, vignette, faded tones, nostalgic"
       base_negative: "(worst quality, low quality:1.4), nsfw, digital, sharp, oversaturated, modern, text, watermark, blurry, deformed"
 
@@ -214,11 +214,11 @@ presets:
       base_negative: "(worst quality, low quality:1.4), nsfw, color, flat lighting, blurry, text, watermark, deformed"
 
     hdr:
-      model: realismIllustriousBy_v55FP16
-      denoising_strength: 0.5
-      steps: 30
-      cfg_scale: 7
-      sampler_name: DPM++ 2M Karras
+      model: RealVisXL_V5.0_fp16
+      denoising_strength: 0.38
+      steps: 32
+      cfg_scale: 5.5
+      sampler_name: DPM++ SDE Karras
       base_positive: "(masterpiece, best quality:1.2), HDR photography, high dynamic range, vivid saturated colors, sharp, ultra-detailed, dramatic lighting, photorealistic"
       base_negative: "(worst quality, low quality:1.4), nsfw, flat, low contrast, blurry, grainy, text, watermark, deformed"
 
@@ -241,11 +241,11 @@ presets:
       base_negative: "(worst quality, low quality:1.4), nsfw, photograph, digital, sketch, watercolor, blurry, ugly, deformed, text, watermark"
 
     golden_hour:
-      model: realismIllustriousBy_v55FP16
-      denoising_strength: 0.45
-      steps: 30
-      cfg_scale: 7
-      sampler_name: DPM++ 2M Karras
+      model: RealVisXL_V5.0_fp16
+      denoising_strength: 0.35
+      steps: 32
+      cfg_scale: 5.5
+      sampler_name: DPM++ SDE Karras
       base_positive: "(masterpiece, best quality:1.2), golden hour photography, warm amber tones, soft sunset glow, long shadows, romantic atmosphere, photorealistic"
       base_negative: "(worst quality, low quality:1.4), nsfw, cold tones, overcast, flat lighting, blurry, text, watermark, deformed"
 
@@ -259,20 +259,20 @@ presets:
       base_negative: "(worst quality, low quality:1.4), nsfw, bright, colorful, cheerful, flat, blurry, text, watermark, deformed"
 
     vibrant:
-      model: realismIllustriousBy_v55FP16
-      denoising_strength: 0.45
-      steps: 30
-      cfg_scale: 7
-      sampler_name: DPM++ 2M Karras
+      model: RealVisXL_V5.0_fp16
+      denoising_strength: 0.35
+      steps: 32
+      cfg_scale: 5.5
+      sampler_name: DPM++ SDE Karras
       base_positive: "(masterpiece, best quality:1.2), vibrant vivid colors, high saturation, dynamic, energetic, sharp, photorealistic, ultra-detailed"
       base_negative: "(worst quality, low quality:1.4), nsfw, desaturated, muted, flat, blurry, text, watermark, deformed"
 
     cool_blue:
-      model: realismIllustriousBy_v55FP16
-      denoising_strength: 0.45
-      steps: 30
-      cfg_scale: 7
-      sampler_name: DPM++ 2M Karras
+      model: RealVisXL_V5.0_fp16
+      denoising_strength: 0.35
+      steps: 32
+      cfg_scale: 5.5
+      sampler_name: DPM++ SDE Karras
       base_positive: "(masterpiece, best quality:1.2), cool blue tones, overcast sky, urban atmosphere, crisp, photorealistic, cinematic, teal tones"
       base_negative: "(worst quality, low quality:1.4), nsfw, warm, orange, yellow, blurry, text, watermark, deformed"
 
@@ -327,9 +327,9 @@ presets:
       gfpgan_visibility: 0.0
       codeformer_visibility: 0.8
       codeformer_weight: 0.35
-      denoising_strength: 0.24
-      steps: 25
-      cfg_scale: 5.5
+      denoising_strength: 0.22
+      steps: 28
+      cfg_scale: 5
       sampler_name: DPM++ 2M Karras
       base_positive: "restored archival photograph, faithful identity, natural skin texture, repaired scratches, clean paper texture, balanced contrast, realistic detail, preserved original composition"
       base_negative: "(worst quality, low quality:1.4), nsfw, changed identity, over-smoothed face, plastic skin, hallucinated details, scratches, noise, grain, blur, damage, artifact, torn, watermark, text"
@@ -341,9 +341,9 @@ presets:
         - realisticVisionV60B1_v30VAE-inpainting
         - sd-v1-5-inpainting
         - v1-5-pruned-emaonly
-      denoising_strength: 0.85
-      steps: 35
-      cfg_scale: 7
+      denoising_strength: 0.82
+      steps: 32
+      cfg_scale: 6.5
       sampler_name: DPM++ 2M Karras
       expand_pixels: 256
       base_positive: "(masterpiece, best quality:1.2), RAW photo, photorealistic, seamless, natural continuation, consistent lighting, sharp focus"
@@ -355,8 +355,8 @@ presets:
         - counterfeitV30Fp16_30Inpaint
         - Counterfeit_V3-inpainting
         - anything-v5
-      denoising_strength: 0.85
-      steps: 20
+      denoising_strength: 0.82
+      steps: 24
       cfg_scale: 7
       sampler_name: DPM++ 2M Karras
       expand_pixels: 256
@@ -368,10 +368,10 @@ presets:
       model_candidates:
         - juggernautXL_versionXInpaint
         - Juggernaut-XL_v9_RunDiffusionPhoto_v2
-      denoising_strength: 0.85
-      steps: 35
-      cfg_scale: 7
-      sampler_name: DPM++ 2M Karras
+      denoising_strength: 0.82
+      steps: 32
+      cfg_scale: 5.5
+      sampler_name: DPM++ SDE Karras
       expand_pixels: 256
       base_positive: "commercial photography, professional studio lighting, seamless, natural continuation, consistent background, sharp focus, photorealistic"
       base_negative: "(worst quality, low quality:2), nsfw, blurry, inconsistent lighting, abrupt edge, seam, text, watermark, cartoon, deformed"
@@ -382,9 +382,9 @@ presets:
         - realisticVisionV60B1_v30VAE-inpainting
         - sd-v1-5-inpainting
         - chilloutmix_NiPrunedFp32Fix
-      denoising_strength: 0.8
+      denoising_strength: 0.78
       steps: 30
-      cfg_scale: 7
+      cfg_scale: 6.5
       sampler_name: DPM++ 2M Karras
       expand_pixels: 256
       base_positive: "(masterpiece, best quality:1.2), RAW photo, photorealistic, portrait, seamless, natural continuation, consistent lighting and skin tone"
@@ -397,9 +397,9 @@ presets:
         - dreamshaper_8
         - sd-v1-5-inpainting
         - v1-5-pruned-emaonly
-      denoising_strength: 0.85
-      steps: 30
-      cfg_scale: 7.5
+      denoising_strength: 0.82
+      steps: 28
+      cfg_scale: 7
       sampler_name: DPM++ 2M Karras
       expand_pixels: 256
       base_positive: "(masterpiece, best quality:1.2), digital painting, trending on artstation, concept art, seamless, natural continuation, consistent art style"
@@ -411,9 +411,9 @@ presets:
         - realisticVisionV60B1_v30VAE-inpainting
         - sd-v1-5-inpainting
         - chilloutmix_NiPrunedFp32Fix
-      denoising_strength: 0.85
-      steps: 25
-      cfg_scale: 7
+      denoising_strength: 0.82
+      steps: 30
+      cfg_scale: 6.5
       sampler_name: DPM++ 2M Karras
       expand_pixels: 256
       base_positive: "(masterpiece, best quality:1.2), photorealistic, natural skin, seamless, natural continuation, consistent lighting, sharp focus"
@@ -426,9 +426,9 @@ presets:
         - realisticVisionV60B1_v30VAE-inpainting
         - sd-v1-5-inpainting
         - v1-5-pruned-emaonly
-      denoising_strength: 0.75
-      steps: 30
-      cfg_scale: 7
+      denoising_strength: 0.68
+      steps: 28
+      cfg_scale: 6.5
       sampler_name: DPM++ 2M Karras
       mask_blur: 4
       inpaint_full_res_padding: 32
@@ -441,8 +441,8 @@ presets:
         - counterfeitV30Fp16_30Inpaint
         - Counterfeit_V3-inpainting
         - anything-v5
-      denoising_strength: 0.75
-      steps: 20
+      denoising_strength: 0.7
+      steps: 24
       cfg_scale: 7
       sampler_name: DPM++ 2M Karras
       mask_blur: 4
@@ -455,10 +455,10 @@ presets:
       model_candidates:
         - juggernautXL_versionXInpaint
         - Juggernaut-XL_v9_RunDiffusionPhoto_v2
-      denoising_strength: 0.75
-      steps: 30
-      cfg_scale: 7
-      sampler_name: DPM++ 2M Karras
+      denoising_strength: 0.68
+      steps: 32
+      cfg_scale: 5.5
+      sampler_name: DPM++ SDE Karras
       mask_blur: 4
       inpaint_full_res_padding: 32
       base_positive: "commercial photography, product shot, professional studio lighting, sharp focus, highly detailed, photorealistic, seamless"
@@ -470,9 +470,9 @@ presets:
         - realisticVisionV60B1_v30VAE-inpainting
         - sd-v1-5-inpainting
         - chilloutmix_NiPrunedFp32Fix
-      denoising_strength: 0.75
-      steps: 30
-      cfg_scale: 7
+      denoising_strength: 0.65
+      steps: 28
+      cfg_scale: 6.5
       sampler_name: DPM++ 2M Karras
       mask_blur: 4
       inpaint_full_res_padding: 32
@@ -486,9 +486,9 @@ presets:
         - dreamshaper_8
         - sd-v1-5-inpainting
         - v1-5-pruned-emaonly
-      denoising_strength: 0.75
-      steps: 30
-      cfg_scale: 7.5
+      denoising_strength: 0.7
+      steps: 28
+      cfg_scale: 7
       sampler_name: DPM++ 2M Karras
       mask_blur: 4
       inpaint_full_res_padding: 32
@@ -501,9 +501,9 @@ presets:
         - realisticVisionV60B1_v30VAE-inpainting
         - sd-v1-5-inpainting
         - chilloutmix_NiPrunedFp32Fix
-      denoising_strength: 0.75
-      steps: 25
-      cfg_scale: 7
+      denoising_strength: 0.68
+      steps: 28
+      cfg_scale: 6.5
       sampler_name: DPM++ 2M Karras
       mask_blur: 4
       inpaint_full_res_padding: 32
@@ -512,6 +512,12 @@ presets:
 
 # Model metadata
 models:
+  RealVisXL_V5.0_fp16:
+    sd_version: "XL"
+    default_width: 1024
+    default_height: 1024
+    # General SDXL photoreal checkpoint for realistic txt2img/img2img styles.
+    clip_skip: 1
   realisticVisionV60B1_v30VAE-inpainting:
     sd_version: "1.5"
     default_width: 512

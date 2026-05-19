@@ -9,7 +9,7 @@ from app.models.user import User
 from app.services.a1111_client import a1111
 from app.services.adetailer_service import build_adetailer_scripts, has_adetailer
 from app.services.auth_service import get_current_user
-from app.services.controlnet_service import build_controlnet_scripts, merge_alwayson_scripts
+from app.services.controlnet_service import build_controlnet_scripts, merge_alwayson_scripts, validate_controlnet_mode
 from app.services.image_utils import ensure_image_size, get_image_size
 from app.services.job_service import create_job, run_job, save_job_images
 from app.services.model_service import add_model_override, resolve_checkpoint, resolve_controlnet_checkpoint
@@ -72,14 +72,14 @@ async def edit_image(
     image_bytes = await read_image_upload(image)
     source_width, source_height = get_image_size(image_bytes)
     file_path, filename = await save_upload(image_bytes)
-    controlnet = {}
+    control_reference_b64 = None
+    control_mode_value = control_mode or "edges"
     if control_image is not None and hasattr(control_image, "read"):
         reference_bytes = await read_image_upload(control_image)
+        control_reference_b64 = a1111.encode_image(reference_bytes)
         try:
-            controlnet = await build_controlnet_scripts(a1111, a1111.encode_image(reference_bytes), control_mode or "edges", control_weight)
+            validate_controlnet_mode(control_mode_value)
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        except RuntimeError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     preset = get_preset("img2img", style)
@@ -100,12 +100,21 @@ async def edit_image(
         # H1 – checkpoint override
         if checkpoint:
             resolved_checkpoint = checkpoint
-        elif controlnet:
+        elif control_reference_b64:
             resolved_checkpoint = await resolve_controlnet_checkpoint(a1111, preset["model"])
         else:
             resolved_checkpoint = await resolve_checkpoint(a1111, preset["model"])
-        model_meta = get_model_meta(preset["model"])
+        model_meta = get_model_meta(resolved_checkpoint)
         await a1111.load_checkpoint(resolved_checkpoint)
+        controlnet = {}
+        if control_reference_b64:
+            controlnet = await build_controlnet_scripts(
+                a1111,
+                control_reference_b64,
+                control_mode_value,
+                control_weight,
+                prefer_sdxl=model_meta.get("sd_version") == "XL",
+            )
         positive = merge_prompt(preset["base_positive"], prompt)
         # G2 – negative prompt
         negative = preset["base_negative"]

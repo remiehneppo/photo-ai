@@ -61,10 +61,16 @@ async def pose_control(
 
     async def task():
         checkpoint = await resolve_controlnet_checkpoint(a1111, preset["model"])
-        model_meta = get_model_meta(preset["model"])
+        model_meta = get_model_meta(checkpoint)
         await a1111.load_checkpoint(checkpoint)
         positive = merge_prompt(preset["base_positive"], prompt)
-        cn_scripts = await build_controlnet_scripts(a1111, b64_input, "pose", weight=controlnet_weight)
+        cn_scripts = await build_controlnet_scripts(
+            a1111,
+            b64_input,
+            "pose",
+            weight=controlnet_weight,
+            prefer_sdxl=model_meta.get("sd_version") == "XL",
+        )
         payload = {
             "prompt": positive,
             "negative_prompt": preset["base_negative"],

@@ -10,6 +10,15 @@ class FakeA1111:
         return ["control_v11p_sd15_canny", "control_v11p_sd15_depth"]
 
 
+class FakeMixedA1111:
+    async def get_controlnet_models(self):
+        return [
+            "control_v11p_sd15_canny",
+            "control_v11p_sd15_depth",
+            "xinsir_controlnet_union_sdxl_1.0",
+        ]
+
+
 def test_build_controlnet_scripts_selects_model_by_mode():
     scripts = asyncio.run(build_controlnet_scripts(FakeA1111(), "encoded-reference", "edges", 0.8))
     unit = scripts["ControlNet"]["args"][0]
@@ -27,6 +36,14 @@ def test_build_controlnet_scripts_falls_back_for_sketch_modes():
     assert unit["module"] == "canny"
     assert unit["model"] == "control_v11p_sd15_canny"
     assert unit["threshold_a"] == 100
+
+
+def test_build_controlnet_scripts_prefers_union_for_sdxl():
+    scripts = asyncio.run(build_controlnet_scripts(FakeMixedA1111(), "encoded-reference", "edges", 0.8, prefer_sdxl=True))
+    unit = scripts["ControlNet"]["args"][0]
+
+    assert unit["module"] == "canny"
+    assert unit["model"] == "xinsir_controlnet_union_sdxl_1.0"
 
 
 def test_build_controlnet_scripts_reports_missing_mode_model():

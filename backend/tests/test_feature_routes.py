@@ -39,6 +39,7 @@ class FakeA1111:
 
     async def get_models(self):
         return [
+            {"model_name": "RealVisXL_V5.0_fp16"},
             {"model_name": "realismIllustriousBy_v55FP16"},
             {"model_name": "anything-v5"},
             {"model_name": "Juggernaut-XL_v9_RunDiffusionPhoto_v2"},
@@ -59,7 +60,7 @@ class FakeA1111:
         return [{"name": "Euler a"}, {"name": "DPM++ 2M Karras"}]
 
     async def get_controlnet_models(self):
-        return ["control_v11p_sd15_canny"]
+        return ["control_v11p_sd15_canny", "xinsir_controlnet_union_sdxl_1.0"]
 
     async def get_sam_models(self):
         return ["sam_vit_b_01ec64.pth"]
@@ -198,7 +199,7 @@ def test_generate_route_creates_job_and_output_image(monkeypatch):
     assert db.query(Image).filter(Image.job_id == response.job_id).first().filename == "output.png"
     assert fake.payloads[0][0] == "txt2img"
     assert "cinematic portrait" in fake.payloads[0][1]["prompt"]
-    assert fake.payloads[0][1]["override_settings"]["sd_model_checkpoint"] == "realismIllustriousBy_v55FP16"
+    assert fake.payloads[0][1]["override_settings"]["sd_model_checkpoint"] == "RealVisXL_V5.0_fp16"
 
 
 def test_generate_route_uses_style_checkpoint_from_config(monkeypatch):
@@ -275,7 +276,7 @@ def test_generate_with_reference_adds_controlnet_payload(monkeypatch):
     controlnet_unit = fake.payloads[0][1]["alwayson_scripts"]["ControlNet"]["args"][0]
     assert controlnet_unit["image"] == "encoded-input"
     assert controlnet_unit["module"] == "canny"
-    assert controlnet_unit["model"] == "control_v11p_sd15_canny"
+    assert controlnet_unit["model"] == "xinsir_controlnet_union_sdxl_1.0"
     assert controlnet_unit["weight"] == 0.8
 
 
@@ -305,7 +306,7 @@ def test_edit_route_saves_input_and_output(monkeypatch):
     assert fake.payloads[0][1]["init_images"] == ["encoded-input"]
     assert fake.payloads[0][1]["width"] == 17
     assert fake.payloads[0][1]["height"] == 11
-    assert fake.payloads[0][1]["override_settings"]["sd_model_checkpoint"] == "realismIllustriousBy_v55FP16"
+    assert fake.payloads[0][1]["override_settings"]["sd_model_checkpoint"] == "RealVisXL_V5.0_fp16"
 
 
 def test_edit_resizes_output_to_match_source_size():
@@ -534,11 +535,11 @@ def test_capabilities_route_reports_a1111_features(monkeypatch):
     result = asyncio.run(capabilities.get_capabilities())
 
     assert result.a1111_connected is True
-    assert result.checkpoints == ["realismIllustriousBy_v55FP16", "anything-v5", "Juggernaut-XL_v9_RunDiffusionPhoto_v2", "v1-5-pruned-emaonly"]
+    assert result.checkpoints == ["RealVisXL_V5.0_fp16", "realismIllustriousBy_v55FP16", "anything-v5", "Juggernaut-XL_v9_RunDiffusionPhoto_v2", "v1-5-pruned-emaonly"]
     assert result.upscalers == ["R-ESRGAN 4x+", "4x-UltraSharp"]
     assert result.samplers == ["Euler a", "DPM++ 2M Karras"]
     assert result.controlnet_available is True
-    assert result.controlnet_models == ["control_v11p_sd15_canny"]
+    assert result.controlnet_models == ["control_v11p_sd15_canny", "xinsir_controlnet_union_sdxl_1.0"]
     assert result.adetailer_available is True
     assert result.sam_available is True
     assert result.sam_models == ["sam_vit_b_01ec64.pth"]

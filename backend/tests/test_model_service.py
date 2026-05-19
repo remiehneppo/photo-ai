@@ -15,6 +15,17 @@ class FakeControlNetA1111:
         return ["control_v11p_sd15_canny [d14c016b]"]
 
 
+class FakeSdxlControlNetA1111:
+    async def get_models(self):
+        return [
+            {"model_name": "RealVisXL_V5.0_fp16"},
+            {"model_name": "chilloutmix_NiPrunedFp32Fix"},
+        ]
+
+    async def get_controlnet_models(self):
+        return ["control_v11p_sd15_canny [d14c016b]", "xinsir_controlnet_union_sdxl_1.0"]
+
+
 def test_select_checkpoint_matches_config_model_names():
     candidates = [
         "anything-v5",
@@ -54,3 +65,9 @@ def test_resolve_controlnet_checkpoint_uses_sd15_fallback_for_sd15_controlnet():
     checkpoint = asyncio.run(resolve_controlnet_checkpoint(FakeControlNetA1111(), "realismIllustriousBy_v55FP16"))
 
     assert checkpoint == "chilloutmix_NiPrunedFp32Fix"
+
+
+def test_resolve_controlnet_checkpoint_keeps_sdxl_when_sdxl_controlnet_exists():
+    checkpoint = asyncio.run(resolve_controlnet_checkpoint(FakeSdxlControlNetA1111(), "RealVisXL_V5.0_fp16"))
+
+    assert checkpoint == "RealVisXL_V5.0_fp16"

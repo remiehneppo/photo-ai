@@ -9,7 +9,7 @@ from app.models.user import User
 from app.services.a1111_client import a1111
 from app.services.adetailer_service import build_adetailer_scripts, has_adetailer
 from app.services.auth_service import get_current_user
-from app.services.controlnet_service import build_controlnet_scripts, merge_alwayson_scripts
+from app.services.controlnet_service import build_controlnet_scripts, merge_alwayson_scripts, validate_controlnet_mode
 from app.services.job_service import create_job, run_job, save_job_images
 from app.services.model_service import add_model_override, resolve_checkpoint, resolve_controlnet_checkpoint
 from app.services.preset_service import available_styles, get_model_meta, get_preset, merge_prompt
@@ -155,10 +155,8 @@ async def generate_with_reference(
     reference_bytes = await read_image_upload(control_image)
     b64_reference = a1111.encode_image(reference_bytes)
     try:
-        controlnet = await build_controlnet_scripts(a1111, b64_reference, control_mode, control_weight)
+        validate_controlnet_mode(control_mode)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     preset = get_preset("txt2img", style)
@@ -176,8 +174,15 @@ async def generate_with_reference(
 
     async def task():
         checkpoint = await resolve_controlnet_checkpoint(a1111, preset["model"])
-        model_meta = get_model_meta(preset["model"])
+        model_meta = get_model_meta(checkpoint)
         await a1111.load_checkpoint(checkpoint)
+        controlnet = await build_controlnet_scripts(
+            a1111,
+            b64_reference,
+            control_mode,
+            control_weight,
+            prefer_sdxl=model_meta.get("sd_version") == "XL",
+        )
         positive = merge_prompt(preset["base_positive"], prompt)
         payload = {
             "prompt": positive,

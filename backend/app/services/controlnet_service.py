@@ -52,13 +52,13 @@ async def build_controlnet_scripts(
     image_b64: str,
     mode: str,
     weight: float = 0.7,
+    prefer_sdxl: bool = False,
 ) -> dict[str, Any]:
-    if mode not in CONTROLNET_MODES:
-        raise ValueError(f"Invalid ControlNet mode. Choose from: {list(CONTROLNET_MODES)}")
+    validate_controlnet_mode(mode)
 
     models = await a1111_client.get_controlnet_models()
-    mode_config = _select_mode_config(models, mode)
-    model = _select_model(models, mode_config["model_keyword"])
+    mode_config = _select_mode_config(models, mode, prefer_sdxl=prefer_sdxl)
+    model = _select_model(models, mode_config["model_keyword"], prefer_sdxl=prefer_sdxl)
     if not model:
         raise RuntimeError(f"Missing ControlNet model for mode: {mode}")
 
@@ -94,21 +94,44 @@ def merge_alwayson_scripts(*scripts: dict[str, Any]) -> dict[str, Any]:
     return merged
 
 
-def _select_model(models: list[str], keyword: str) -> str | None:
+def validate_controlnet_mode(mode: str) -> None:
+    if mode not in CONTROLNET_MODES:
+        raise ValueError(f"Invalid ControlNet mode. Choose from: {list(CONTROLNET_MODES)}")
+
+
+def _select_model(models: list[str], keyword: str, prefer_sdxl: bool = False) -> str | None:
+    if prefer_sdxl:
+        for model in models:
+            if keyword.lower() in model.lower() and _is_sdxl_controlnet(model):
+                return model
+        for model in models:
+            if _is_union_sdxl_controlnet(model):
+                return model
+
     for model in models:
         if keyword.lower() in model.lower():
             return model
     return None
 
 
-def _select_mode_config(models: list[str], mode: str) -> dict[str, Any]:
+def _select_mode_config(models: list[str], mode: str, prefer_sdxl: bool = False) -> dict[str, Any]:
     config = CONTROLNET_MODES[mode]
-    if _select_model(models, config["model_keyword"]):
+    if _select_model(models, config["model_keyword"], prefer_sdxl=prefer_sdxl):
         return config
 
     for fallback_mode in config.get("fallback_modes", []):
         fallback_config = CONTROLNET_MODES[fallback_mode]
-        if _select_model(models, fallback_config["model_keyword"]):
+        if _select_model(models, fallback_config["model_keyword"], prefer_sdxl=prefer_sdxl):
             return fallback_config
 
     return config
+
+
+def _is_sdxl_controlnet(model: str) -> bool:
+    lowered = model.lower()
+    return "sdxl" in lowered or "union" in lowered or "_xl" in lowered or "-xl" in lowered
+
+
+def _is_union_sdxl_controlnet(model: str) -> bool:
+    lowered = model.lower()
+    return "union" in lowered and ("sdxl" in lowered or "xl" in lowered)

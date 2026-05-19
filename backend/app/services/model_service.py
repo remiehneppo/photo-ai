@@ -39,6 +39,9 @@ async def resolve_controlnet_checkpoint(a1111_client, preferred: str) -> str:
     except Exception:
         return match
 
+    if _looks_like_sdxl_checkpoint(match) and _has_sdxl_controlnet(controlnet_models):
+        return match
+
     if not _requires_sd15_controlnet(controlnet_models) or _looks_like_sd15_checkpoint(match):
         return match
 
@@ -103,8 +106,17 @@ def _requires_sd15_controlnet(models: list[str]) -> bool:
     return any("sd15" in model.lower() or "sd1" in model.lower() for model in models)
 
 
+def _has_sdxl_controlnet(models: list[str]) -> bool:
+    return any("sdxl" in model.lower() or "union" in model.lower() or "_xl" in model.lower() or "-xl" in model.lower() for model in models)
+
+
 def _looks_like_sd15_checkpoint(model_name: str) -> bool:
     normalized = _normalize(model_name)
     if "xl" in normalized or "illustrious" in normalized or "juggernaut" in normalized:
         return False
     return any(token in normalized for token in ("v15", "v1-5", "prunedemaonly", "chilloutmix", "anythingv5"))
+
+
+def _looks_like_sdxl_checkpoint(model_name: str) -> bool:
+    normalized = _normalize(model_name)
+    return any(token in normalized for token in ("xl", "illustrious", "juggernaut"))

@@ -8,8 +8,8 @@ def test_get_preset_returns_copy_and_style_settings():
 
     fresh = preset_service.get_preset("txt2img", "realistic")
 
-    assert fresh["model"] == "realismIllustriousBy_v55FP16"
-    assert fresh["steps"] == 30
+    assert fresh["model"] == "RealVisXL_V5.0_fp16"
+    assert fresh["steps"] == 32
     assert "base_positive" in fresh
 
 
