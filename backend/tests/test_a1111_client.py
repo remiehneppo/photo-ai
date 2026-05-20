@@ -79,6 +79,7 @@ def test_a1111_client_calls_expected_endpoints(monkeypatch):
     assert asyncio.run(client.upscale({"image": "x"})) == "upscaled"
     assert asyncio.run(client.upscale_batch({"imageList": []})) == ["batch-a", "batch-b"]
     asyncio.run(client.offload_unused_models())
+    asyncio.run(client.cleanup_after_job())
     assert asyncio.run(client.get_progress())["progress"] == 0.5
     assert asyncio.run(client.get_upscalers())[0]["name"] == "R-ESRGAN 4x+"
     assert asyncio.run(client.get_extensions())[0]["name"] == "sd-webui-controlnet"
@@ -89,7 +90,8 @@ def test_a1111_client_calls_expected_endpoints(monkeypatch):
     assert ("POST", "http://a1111.local/sdapi/v1/options", {"sd_model_checkpoint": "model-a"}) in FakeAsyncClient.calls
     assert ("POST", "http://a1111.local/sdapi/v1/options", {"sd_model_checkpoint": "model-b"}) in FakeAsyncClient.calls
     assert ("POST", "http://a1111.local/sdapi/v1/reload-checkpoint", None) in FakeAsyncClient.calls
-    assert ("POST", "http://a1111.local/sdapi/v1/unload-checkpoint", None) in FakeAsyncClient.calls
+    unload_calls = [call for call in FakeAsyncClient.calls if call == ("POST", "http://a1111.local/sdapi/v1/unload-checkpoint", None)]
+    assert len(unload_calls) >= 2
     assert ("POST", "http://a1111.local/sdapi/v1/txt2img", {"prompt": "x"}) in FakeAsyncClient.calls
     assert ("GET", "http://a1111.local/sdapi/v1/sd-models", None) in FakeAsyncClient.calls
     assert ("GET", "http://a1111.local/sdapi/v1/progress?skip_current_image=true", None) in FakeAsyncClient.calls
@@ -123,3 +125,18 @@ def test_image_encoding_round_trip():
     encoded = A1111Client.encode_image(b"image-bytes")
 
     assert A1111Client.decode_image(encoded) == b"image-bytes"
+
+
+def test_cleanup_after_job_unloads_checkpoint(monkeypatch):
+    import app.services.a1111_client as module
+
+    FakeAsyncClient.calls = []
+    monkeypatch.setattr(module.httpx, "AsyncClient", FakeAsyncClient)
+    client = A1111Client()
+    client.base_url = "http://a1111.local"
+    client._loaded_checkpoint = "model-a"
+
+    asyncio.run(client.cleanup_after_job())
+
+    assert client._loaded_checkpoint is None
+    assert ("POST", "http://a1111.local/sdapi/v1/unload-checkpoint", None) in FakeAsyncClient.calls

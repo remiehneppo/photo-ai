@@ -65,12 +65,13 @@ def test_build_controlnet_scripts_product_layout_uses_reference_and_structure_un
     assert reference_unit["module"] == "reference_only"
     assert reference_unit["model"] == "None"
     assert reference_unit["weight"] == 0.85
-    assert reference_unit["guidance_end"] == 1.0
+    assert reference_unit["guidance_end"] == 0.75
     assert reference_unit["control_mode"] == "Balanced"
     assert structure_unit["module"] == "canny"
     assert structure_unit["model"] == "control_v11p_sd15_canny"
-    assert structure_unit["weight"] == 0.595
-    assert structure_unit["guidance_end"] == 0.85
+    assert structure_unit["weight"] == 0.3825
+    assert structure_unit["guidance_end"] == 0.45
+    assert structure_unit["control_mode"] == "Balanced"
 
 
 def test_build_controlnet_scripts_reports_missing_mode_model():

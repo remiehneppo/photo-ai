@@ -659,7 +659,7 @@ function ReferenceControl({
     { value: "edges", label: "Edges", keyword: "canny", recommendedWeight: 0.85 },
     { value: "depth", label: "Depth", keyword: "depth", recommendedWeight: 0.9 },
     { value: "pose", label: "Pose", keyword: "openpose", recommendedWeight: 1.0 },
-    { value: "product_layout", label: "Product", keyword: "", recommendedWeight: 0.85 }
+    { value: "product_layout", label: "Product", keyword: "", recommendedWeight: 0.9 }
   ];
   const hasUnionModel = controlnetModels.some((model) => model.toLowerCase().includes("union"));
   const hasModeModel = (keyword: string) => (

@@ -6,7 +6,7 @@ from typing import Any
 
 import httpx
 
-from app.config import A1111_BASE_URL, A1111_OFFLOAD_BEFORE_JOB, A1111_TIMEOUT_SECONDS
+from app.config import A1111_BASE_URL, A1111_CLEANUP_AFTER_JOB, A1111_OFFLOAD_BEFORE_JOB, A1111_TIMEOUT_SECONDS
 
 logger = logging.getLogger("photo_ai.a1111")
 
@@ -53,12 +53,21 @@ class A1111Client:
         self._loaded_checkpoint = model_name
 
     async def offload_unused_models(self) -> None:
-        """Ask A1111 to unload the active checkpoint when a job finishes."""
+        """Ask A1111 to unload the active checkpoint before switching models."""
         if not A1111_OFFLOAD_BEFORE_JOB:
             return
+        await self._unload_checkpoint("unload_checkpoint")
+
+    async def cleanup_after_job(self) -> None:
+        """Release A1111 VRAM after a completed or failed generation job."""
+        if not A1111_CLEANUP_AFTER_JOB:
+            return
+        await self._unload_checkpoint("cleanup_after_job")
+
+    async def _unload_checkpoint(self, operation: str) -> None:
         async with httpx.AsyncClient(timeout=30) as client:
             r = await client.post(f"{self.base_url}/sdapi/v1/unload-checkpoint")
-            self._raise_for_status(r, "unload_checkpoint")
+            self._raise_for_status(r, operation)
             self._loaded_checkpoint = None
 
     async def txt2img(self, payload: dict[str, Any]) -> tuple[list[str], int | None]:

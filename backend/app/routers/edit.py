@@ -142,5 +142,5 @@ async def edit_image(
         img_bytes = ensure_image_size(a1111.decode_image(images[0]), (source_width, source_height))
         await save_job_images(job_id, user_id, [img_bytes], input_file_path=file_path, input_filename=filename, seed=resolved_seed)
 
-    background_tasks.add_task(run_job, job_id, task, a1111.get_progress)
+    background_tasks.add_task(run_job, job_id, task, a1111.get_progress, cleanup_provider=a1111.cleanup_after_job)
     return JobResponse(job_id=job_id, status="pending")

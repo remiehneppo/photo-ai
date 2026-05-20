@@ -83,6 +83,9 @@ class FakeA1111:
     async def offload_unused_models(self) -> None:
         pass
 
+    async def cleanup_after_job(self) -> None:
+        pass
+
     async def sam_heartbeat(self):
         return True
 
@@ -105,6 +108,19 @@ class OOMOnceA1111(FakeA1111):
         self.payloads.append(("txt2img", payload))
         if self.calls == 1:
             raise RuntimeError("CUDA out of memory. Tried to allocate 1024.00 MiB.")
+        return (["encoded-output"], None)
+
+
+class OOMOnceImg2ImgA1111(FakeA1111):
+    def __init__(self):
+        super().__init__()
+        self.calls = 0
+
+    async def img2img(self, payload):
+        self.calls += 1
+        self.payloads.append(("img2img", payload))
+        if self.calls == 1:
+            raise RuntimeError("CUDA out of memory. Tried to allocate 4096.00 MiB.")
         return (["encoded-output"], None)
 
 
@@ -185,7 +201,7 @@ async def async_return(value):
     return value
 
 
-async def run_immediately(_job_id, task_fn, *_args):
+async def run_immediately(_job_id, task_fn, *_args, **_kwargs):
     await task_fn()
 
 
@@ -353,14 +369,24 @@ def test_generate_with_reference_product_layout_adds_reference_and_structure_uni
     ))
 
     assert response.status == "pending"
-    reference_unit, structure_unit = fake.payloads[0][1]["alwayson_scripts"]["ControlNet"]["args"]
+    assert fake.payloads[0][0] == "img2img"
+    payload = fake.payloads[0][1]
+    assert payload["init_images"] == ["encoded-input"]
+    assert payload["denoising_strength"] == 0.52
+    assert payload["width"] == 17
+    assert payload["height"] == 11
+    assert "preserve the exact same product identity" in payload["prompt"]
+    assert "different product" in payload["negative_prompt"]
+    reference_unit, structure_unit = payload["alwayson_scripts"]["ControlNet"]["args"]
     assert reference_unit["module"] == "reference_only"
     assert reference_unit["model"] == "None"
     assert reference_unit["control_mode"] == "Balanced"
-    assert reference_unit["guidance_end"] == 1.0
+    assert reference_unit["weight"] == 0.8
+    assert reference_unit["guidance_end"] == 0.75
     assert structure_unit["module"] == "canny"
     assert structure_unit["model"] == "xinsir_controlnet_union_sdxl_1.0"
-    assert structure_unit["guidance_end"] == 0.85
+    assert structure_unit["guidance_end"] == 0.45
+    assert structure_unit["control_mode"] == "Balanced"
 
 
 def test_generate_with_reference_anime_style_keeps_style_checkpoint(monkeypatch):
@@ -431,9 +457,9 @@ def test_generate_with_reference_retries_with_smaller_payload_after_oom(monkeypa
     response = asyncio.run(call_and_run_tasks(
         generate.generate_with_reference(
             background_tasks=tasks,
-            prompt="product hero shot",
+            prompt="edge guided hero shot",
             style="realistic",
-            control_mode="product_layout",
+            control_mode="edges",
             control_weight=0.6,
             control_image=Upload(),
             db=db,
@@ -446,6 +472,45 @@ def test_generate_with_reference_retries_with_smaller_payload_after_oom(monkeypa
     assert len(fake.payloads) == 2
     first = fake.payloads[0][1]
     retry = fake.payloads[1][1]
+    assert retry["width"] < first["width"]
+    assert retry["height"] < first["height"]
+    assert retry["steps"] < first["steps"]
+
+
+def test_product_reference_dimensions_caps_large_images():
+    assert generate._product_reference_dimensions(1500, 1500) == (768, 768)
+    assert generate._product_reference_dimensions(1500, 1000) == (768, 512)
+    assert generate._product_reference_dimensions(512, 512) == (512, 512)
+
+
+def test_generate_with_product_reference_retries_img2img_with_smaller_payload_after_oom(monkeypatch):
+    factory = session_factory()
+    db = factory()
+    user = seed_user(db)
+    fake = OOMOnceImg2ImgA1111()
+    patch_common(monkeypatch, generate, factory, fake)
+    tasks = CapturedTasks()
+
+    response = asyncio.run(call_and_run_tasks(
+        generate.generate_with_reference(
+            background_tasks=tasks,
+            prompt="product hero shot",
+            style="realistic",
+            control_mode="product_layout",
+            control_weight=1.0,
+            control_image=SizedPngUpload(width=1500, height=1500),
+            db=db,
+            current_user=user,
+        ),
+        tasks,
+    ))
+
+    assert response.status == "pending"
+    assert len(fake.payloads) == 2
+    first = fake.payloads[0][1]
+    retry = fake.payloads[1][1]
+    assert first["width"] == 768
+    assert first["height"] == 768
     assert retry["width"] < first["width"]
     assert retry["height"] < first["height"]
     assert retry["steps"] < first["steps"]

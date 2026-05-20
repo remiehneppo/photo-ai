@@ -135,7 +135,7 @@ async def replace_background(
         output_bytes = a1111.decode_image(b64_list[0])
         await save_job_images(job_id, user_id, [output_bytes], input_file_path=file_path, input_filename=filename, seed=seed)
 
-    background_tasks.add_task(run_job, job_id, task, a1111.get_progress)
+    background_tasks.add_task(run_job, job_id, task, a1111.get_progress, cleanup_provider=a1111.cleanup_after_job)
     return JobResponse(job_id=job_id, status="pending")
 
 

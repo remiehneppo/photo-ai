@@ -16,6 +16,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1008
 A1111_BASE_URL = os.getenv("A1111_BASE_URL", "http://localhost:7860")
 A1111_TIMEOUT_SECONDS = float(os.getenv("A1111_TIMEOUT_SECONDS", "600"))
 A1111_OFFLOAD_BEFORE_JOB = os.getenv("A1111_OFFLOAD_BEFORE_JOB", "true").lower() not in {"0", "false", "no"}
+A1111_CLEANUP_AFTER_JOB = os.getenv("A1111_CLEANUP_AFTER_JOB", "true").lower() not in {"0", "false", "no"}
 STORAGE_PATH = os.getenv("STORAGE_PATH", "../storage")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(12 * 1024 * 1024)))

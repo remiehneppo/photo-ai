@@ -11,6 +11,7 @@ from app.services.a1111_client import a1111
 from app.services.adetailer_service import build_adetailer_scripts, has_adetailer
 from app.services.auth_service import get_current_user
 from app.services.controlnet_service import CONTROLNET_MODES, build_controlnet_scripts, merge_alwayson_scripts, validate_controlnet_mode
+from app.services.image_utils import get_image_size
 from app.services.job_service import create_job, run_job, save_job_images
 from app.services.model_service import add_model_override, resolve_checkpoint, resolve_controlnet_checkpoint
 from app.services.preset_service import available_styles, get_model_meta, get_preset, merge_prompt
@@ -129,7 +130,7 @@ async def generate(
             retry_payload["seed"] = -1  # different seed for subsequent images
         await save_job_images(job_id, user_id, all_images, seed=last_seed)
 
-    background_tasks.add_task(run_job, job_id, task, a1111.get_progress)
+    background_tasks.add_task(run_job, job_id, task, a1111.get_progress, cleanup_provider=a1111.cleanup_after_job)
     return JobResponse(job_id=job_id, status="pending")
 
 
@@ -156,6 +157,8 @@ async def generate_with_reference(
         raise HTTPException(status_code=400, detail="ADetailer is not available in A1111")
 
     reference_bytes = await read_image_upload(control_image)
+    reference_width, reference_height = get_image_size(reference_bytes)
+    product_width, product_height = _product_reference_dimensions(reference_width, reference_height)
     b64_reference = a1111.encode_image(reference_bytes)
     try:
         validate_controlnet_mode(control_mode)
@@ -198,16 +201,29 @@ async def generate_with_reference(
             "height": preset["height"],
             "seed": seed if seed is not None else -1,
         }
+        if control_mode == "product_layout":
+            payload.update({
+                "init_images": [b64_reference],
+                "prompt": _product_reference_prompt(positive),
+                "negative_prompt": _product_reference_negative(preset["base_negative"]),
+                "denoising_strength": 0.52,
+                "width": product_width,
+                "height": product_height,
+                "cfg_scale": max(float(preset["cfg_scale"]), 6.5),
+            })
         adetailer = build_adetailer_scripts(fix_face_enabled, fix_hands_enabled)
         alwayson_scripts = merge_alwayson_scripts(controlnet, adetailer)
         if alwayson_scripts:
             payload["alwayson_scripts"] = alwayson_scripts
         payload = add_model_override(payload, checkpoint, model_meta.get("clip_skip"))
-        images, resolved_seed, _ = await _txt2img_with_oom_retry(a1111, payload)
+        if control_mode == "product_layout":
+            images, resolved_seed, _ = await _img2img_with_oom_retry(a1111, payload)
+        else:
+            images, resolved_seed, _ = await _txt2img_with_oom_retry(a1111, payload)
         img_bytes = a1111.decode_image(images[0])
         await save_job_images(job_id, user_id, [img_bytes], seed=resolved_seed)
 
-    background_tasks.add_task(run_job, job_id, task, a1111.get_progress)
+    background_tasks.add_task(run_job, job_id, task, a1111.get_progress, cleanup_provider=a1111.cleanup_after_job)
     return JobResponse(job_id=job_id, status="pending")
 
 
@@ -238,6 +254,32 @@ def enhance_prompt(req: EnhancePromptRequest):
     return {"prompt": enhanced}
 
 
+def _product_reference_prompt(prompt: str) -> str:
+    preservation = (
+        "preserve the exact same product identity, colors, material, silhouette, logos, labels, and proportions from the reference image"
+    )
+    return f"{prompt}, {preservation}"
+
+
+def _product_reference_negative(base_negative: str) -> str:
+    product_negative = "different product, changed product color, changed logo, changed label, altered proportions, redesigned packaging"
+    return f"{product_negative}, {base_negative}"
+
+
+def _product_reference_dimensions(width: int, height: int, max_side: int = 768) -> tuple[int, int]:
+    if width <= 0 or height <= 0:
+        return width, height
+    longest = max(width, height)
+    if longest <= max_side:
+        return width, height
+    scale = max_side / float(longest)
+    return _align_generation_dimension(width * scale), _align_generation_dimension(height * scale)
+
+
+def _align_generation_dimension(value: float) -> int:
+    return max(64, int(value) // 64 * 64)
+
+
 def _resolve_dimensions(req: GenerateRequest, preset: dict) -> tuple[int, int]:
     """Return (width, height) honouring aspect_ratio > explicit w/h > preset."""
     if req.aspect_ratio and req.aspect_ratio in ASPECT_RATIO_MAP:
@@ -256,6 +298,7 @@ async def _txt2img_with_oom_retry(a1111_client, payload: dict) -> tuple[list[str
         except Exception as exc:
             if not _is_oom_error(exc):
                 raise
+            await _cleanup_after_oom(a1111_client)
             retry_payload = _build_oom_retry_payload(current_payload)
             if retry_payload["width"] == current_payload["width"] and retry_payload["height"] == current_payload["height"]:
                 raise
@@ -270,6 +313,39 @@ async def _txt2img_with_oom_retry(a1111_client, payload: dict) -> tuple[list[str
             )
             current_payload = retry_payload
     raise RuntimeError("txt2img failed after OOM retries")
+
+
+async def _img2img_with_oom_retry(a1111_client, payload: dict) -> tuple[list[str], int | None, dict]:
+    current_payload = payload
+    for _attempt in range(5):
+        try:
+            images, seed = await a1111_client.img2img(current_payload)
+            return images, seed, current_payload
+        except Exception as exc:
+            if not _is_oom_error(exc):
+                raise
+            await _cleanup_after_oom(a1111_client)
+            retry_payload = _build_oom_retry_payload(current_payload)
+            if retry_payload["width"] == current_payload["width"] and retry_payload["height"] == current_payload["height"]:
+                raise
+            logger.warning(
+                "img2img_oom_retry width=%s height=%s steps=%s retry_width=%s retry_height=%s retry_steps=%s",
+                current_payload.get("width"),
+                current_payload.get("height"),
+                current_payload.get("steps"),
+                retry_payload.get("width"),
+                retry_payload.get("height"),
+                retry_payload.get("steps"),
+            )
+            current_payload = retry_payload
+    raise RuntimeError("img2img failed after OOM retries")
+
+
+async def _cleanup_after_oom(a1111_client) -> None:
+    try:
+        await a1111_client.interrupt()
+    except Exception:
+        logger.warning("a1111_oom_interrupt_failed", exc_info=True)
 
 
 def _is_oom_error(exc: Exception) -> bool:

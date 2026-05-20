@@ -36,8 +36,8 @@ CONTROLNET_MODES = {
         "resize_mode": "Just Resize",
         "pixel_perfect": False,
         "guidance_start": 0.0,
-        "guidance_end": 1.0,
-        "min_weight": 0.85,
+        "guidance_end": 0.75,
+        "min_weight": 0.8,
         "control_mode": "Balanced",
     },
     "scribble": {
@@ -89,11 +89,11 @@ async def build_controlnet_scripts(
                     "threshold_a": 80,
                     "threshold_b": 180,
                     "guidance_start": 0.0,
-                    "guidance_end": 0.85,
+                    "guidance_end": 0.45,
                     "control_mode": "Balanced",
                 },
                 canny_model,
-                max(0.45, min(0.75, weight * 0.7)),
+                max(0.25, min(0.45, weight * 0.45)),
             ))
 
     return {
