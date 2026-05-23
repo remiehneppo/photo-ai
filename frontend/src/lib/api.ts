@@ -38,9 +38,13 @@ async function request<T>(path: string, init: RequestInit = {}) {
     headers.set("Content-Type", "application/json");
   }
 
+  const controller = new AbortController();
+  const signal = init.signal ?? controller.signal;
+
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers,
+    signal,
     cache: "no-store"
   });
 
@@ -242,6 +246,7 @@ export function inpaintImage(payload: {
   style: Style;
   image: File;
   mask: File;
+  reference_image?: File | null;
   fix_face?: boolean;
   fix_hands?: boolean;
   inpaint_full_res?: boolean;
@@ -253,6 +258,7 @@ export function inpaintImage(payload: {
   form.set("style", payload.style);
   form.set("image", payload.image);
   form.set("mask", payload.mask);
+  if (payload.reference_image) form.set("reference_image", payload.reference_image);
   form.set("fix_face", String(Boolean(payload.fix_face)));
   form.set("fix_hands", String(Boolean(payload.fix_hands)));
   form.set("inpaint_full_res", String(payload.inpaint_full_res !== false));

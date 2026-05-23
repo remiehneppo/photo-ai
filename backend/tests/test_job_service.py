@@ -91,6 +91,46 @@ def test_run_job_marks_failure_with_fallback_message(monkeypatch):
     assert job.error_message == "EmptyError: AI job failed without a detailed error message"
 
 
+
+def test_run_job_does_not_mark_cancelled_job_done(monkeypatch):
+    session_factory = make_session_factory()
+    seed_job(session_factory)
+    monkeypatch.setattr(job_service, "SessionLocal", session_factory)
+
+    async def task():
+        db = session_factory()
+        job = db.query(Job).filter(Job.id == "job-1").first()
+        job.status = "failed"
+        job.error_message = "Cancelled by user"
+        job.progress_label = "Cancelled"
+        db.commit()
+        db.close()
+
+    asyncio.run(job_service.run_job("job-1", task))
+
+    job = get_job(session_factory)
+    assert job.status == "failed"
+    assert job.error_message == "Cancelled by user"
+    assert job.progress_label == "Cancelled"
+
+
+def test_run_job_prefers_public_error_message(monkeypatch):
+    session_factory = make_session_factory()
+    seed_job(session_factory)
+    monkeypatch.setattr(job_service, "SessionLocal", session_factory)
+
+    class PublicError(RuntimeError):
+        public_message = "AI engine request failed"
+
+    async def task():
+        raise PublicError("internal http://localhost:7860 detail")
+
+    asyncio.run(job_service.run_job("job-1", task))
+
+    job = get_job(session_factory)
+    assert job.status == "failed"
+    assert job.error_message == "AI engine request failed"
+
 def test_update_job_progress_sets_user_visible_fields(monkeypatch):
     session_factory = make_session_factory()
     seed_job(session_factory)

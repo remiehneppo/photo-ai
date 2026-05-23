@@ -3,7 +3,6 @@ import base64
 import binascii
 from typing import List, Optional
 
-import httpx
 from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -13,7 +12,7 @@ from app.models.user import User
 from app.services.auth_service import get_current_user
 from app.services.preset_service import get_preset, merge_prompt
 from app.services.a1111_client import a1111
-from app.services.storage_service import save_upload
+from app.services.storage_service import delete_image_file, save_upload
 from app.services.job_service import create_job, run_job, save_job_images
 from app.services.upload_service import read_image_upload
 from app.services.model_service import add_model_override, resolve_checkpoint
@@ -66,8 +65,8 @@ async def segment_subject(
     }
     try:
         result = await a1111.sam_predict(payload)
-    except httpx.HTTPStatusError as exc:
-        raise HTTPException(status_code=503, detail=f"SAM prediction failed: {exc.response.text[:300]}") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="SAM prediction failed") from exc
     masks = result.get("masks", [])
     if not masks:
         message = result.get("msg") or "SAM returned no masks"
@@ -99,14 +98,18 @@ async def replace_background(
     source_size = get_image_size(image_bytes)
     normalized_mask_b64 = _validate_mask(mask_b64, source_size)
     file_path, filename = await save_upload(image_bytes)
-    job = create_job(
-        db,
-        user_id=current_user.id,
-        feature="background",
-        style=style,
-        user_prompt=background_prompt,
-        estimated_seconds=60,
-    )
+    try:
+        job = create_job(
+            db,
+            user_id=current_user.id,
+            feature="background",
+            style=style,
+            user_prompt=background_prompt,
+            estimated_seconds=60,
+        )
+    except Exception:
+        delete_image_file(file_path)
+        raise
     job_id = job.id
     user_id = current_user.id
     b64_input = a1111.encode_image(image_bytes)

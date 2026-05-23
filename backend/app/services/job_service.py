@@ -145,6 +145,11 @@ async def run_job(
         logger.info("job_started job_id=%s feature=%s user_id=%s", job_id, feature, user_id)
 
         async with _a1111_job_lock:
+            db.expire_all()
+            job = db.query(Job).filter(Job.id == job_id).first()
+            if not job or job.status == "failed":
+                logger.info("job_skipped job_id=%s reason=cancelled_before_a1111", job_id)
+                return
             _current_job_id = job_id
             try:
                 if progress_provider:
@@ -175,8 +180,12 @@ async def run_job(
                 _current_job_id = None
 
         duration_ms = int((time.monotonic() - start_time) * 1000)
+        db.expire_all()
         job = db.query(Job).filter(Job.id == job_id).first()
         if job:
+            if job.status == "failed":
+                logger.info("job_not_marked_done job_id=%s reason=already_failed_or_cancelled", job_id)
+                return
             job.status = "done"
             job.progress_percent = 100
             job.current_step = job.total_steps
@@ -293,6 +302,9 @@ def _int_or_none(value: Any) -> int | None:
 
 
 def _user_visible_error(exc: Exception) -> str:
+    public_message = getattr(exc, "public_message", None)
+    if isinstance(public_message, str) and public_message.strip():
+        return public_message.strip()
     message = str(exc).strip()
     if message:
         return message

@@ -437,6 +437,7 @@ function InpaintTab({ styles, historyImageSeed, suggestions }: { styles: typeof 
   const [prompt, setPrompt] = useState("");
   const [style, setStyle] = useState<Style>("realistic");
   const [file, setFile] = useState<File | null>(() => (historyImageSeed?.target === "inpaint" ? historyImageSeed.file : null));
+  const [referenceFile, setReferenceFile] = useState<File | null>(null);
   const [seed, setSeed] = useState("");
   const [denoisingStrength, setDenoisingStrength] = useState<number | null>(null);
   const [interrogating, setInterrogating] = useState(false);
@@ -480,6 +481,7 @@ function InpaintTab({ styles, historyImageSeed, suggestions }: { styles: typeof 
         style,
         image: file,
         mask: maskFile,
+        reference_image: referenceFile,
         seed: parseOptionalNumber(seed),
         denoising_strength: denoisingStrength
       });
@@ -498,10 +500,15 @@ function InpaintTab({ styles, historyImageSeed, suggestions }: { styles: typeof 
         {file && <SuggestPromptButton loading={interrogating} onClick={handleSuggestPrompt} />}
         {file && (
           <div>
-            <p className="mb-2 text-sm font-medium text-ink">Paint the area to change</p>
+            <p className="mb-2 text-sm font-medium text-ink">Select the area to change</p>
             <InpaintCanvas ref={canvasRef} imageFile={file} />
           </div>
         )}
+        <div className="rounded-md border border-line bg-surface/70 p-3">
+          <p className="mb-2 text-sm font-medium text-ink">Reference object (optional)</p>
+          <ImageUpload file={referenceFile} onChange={setReferenceFile} />
+          <p className="mt-2 text-xs text-muted">When provided, the reference foreground is placed into the selected area before inpainting, then blended according to the prompt.</p>
+        </div>
         <StyleSelector value={style} onChange={setStyle} styles={styles} />
         <StyleSuggestionBanner prompt={prompt} currentStyle={style} styleKeywords={suggestions?.style_keywords ?? {}} onApply={setStyle} />
         <PromptInput value={prompt} onChange={setPrompt} placeholder="Describe what should appear in the selected area..." suggestions={allExamples} />

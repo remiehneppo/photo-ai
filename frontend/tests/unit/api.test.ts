@@ -69,4 +69,22 @@ describe("api client", () => {
     );
     expect((fetchMock.mock.calls[0][1].headers as Headers).get("Authorization")).toBe("Bearer jwt-2");
   });
+
+  test("inpaintImage sends optional reference image", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ job_id: "job-1", status: "pending" }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { inpaintImage } = await import("@/lib/api");
+    const image = new File(["img"], "image.png", { type: "image/png" });
+    const mask = new File(["mask"], "mask.png", { type: "image/png" });
+    const reference = new File(["ref"], "reference.png", { type: "image/png" });
+
+    await inpaintImage({ prompt: "add object", style: "realistic", image, mask, reference_image: reference });
+
+    const body = fetchMock.mock.calls[0][1].body as FormData;
+    expect(fetchMock.mock.calls[0][0]).toBe("http://api.test/api/inpaint");
+    expect(body.get("image")).toBe(image);
+    expect(body.get("mask")).toBe(mask);
+    expect(body.get("reference_image")).toBe(reference);
+  });
+
 });

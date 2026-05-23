@@ -11,6 +11,15 @@ from app.config import A1111_BASE_URL, A1111_CLEANUP_AFTER_JOB, A1111_OFFLOAD_BE
 logger = logging.getLogger("photo_ai.a1111")
 
 
+class A1111RequestError(RuntimeError):
+    def __init__(self, operation: str, status_code: int | None, detail: str):
+        super().__init__(f"A1111 {operation} failed")
+        self.operation = operation
+        self.status_code = status_code
+        self.detail = detail
+        self.public_message = f"AI engine {operation} request failed"
+
+
 class A1111Client:
     def __init__(self):
         self.base_url = A1111_BASE_URL
@@ -73,47 +82,75 @@ class A1111Client:
     async def txt2img(self, payload: dict[str, Any]) -> tuple[list[str], int | None]:
         """Returns list of base64-encoded images and the seed used."""
         t0 = time.monotonic()
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            r = await client.post(f"{self.base_url}/sdapi/v1/txt2img", json=payload)
-            self._raise_for_status(r, "txt2img")
-            data = r.json()
-            logger.info("a1111_txt2img_done duration_ms=%d", int((time.monotonic() - t0) * 1000))
-            return data["images"], _extract_seed(data)
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                r = await client.post(f"{self.base_url}/sdapi/v1/txt2img", json=payload)
+                self._raise_for_status(r, "txt2img")
+                data = r.json()
+                logger.info("a1111_txt2img_done duration_ms=%d", int((time.monotonic() - t0) * 1000))
+                return data["images"], _extract_seed(data)
+        except httpx.TimeoutException as e:
+            logger.error("a1111_txt2img_timeout error=%s", e)
+            raise RuntimeError("A1111 txt2img timed out") from e
+        except Exception as e:
+            logger.exception("a1111_txt2img_failed error=%s", e)
+            raise
 
     async def img2img(self, payload: dict[str, Any]) -> tuple[list[str], int | None]:
         """Returns list of base64-encoded images and the seed used."""
         t0 = time.monotonic()
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            r = await client.post(f"{self.base_url}/sdapi/v1/img2img", json=payload)
-            self._raise_for_status(r, "img2img")
-            data = r.json()
-            logger.info("a1111_img2img_done duration_ms=%d", int((time.monotonic() - t0) * 1000))
-            return data["images"], _extract_seed(data)
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                r = await client.post(f"{self.base_url}/sdapi/v1/img2img", json=payload)
+                self._raise_for_status(r, "img2img")
+                data = r.json()
+                logger.info("a1111_img2img_done duration_ms=%d", int((time.monotonic() - t0) * 1000))
+                return data["images"], _extract_seed(data)
+        except httpx.TimeoutException as e:
+            logger.error("a1111_img2img_timeout error=%s", e)
+            raise RuntimeError("A1111 img2img timed out") from e
+        except Exception as e:
+            logger.exception("a1111_img2img_failed error=%s", e)
+            raise
 
     async def upscale(self, payload: dict[str, Any]) -> str:
         """Returns base64-encoded image."""
         t0 = time.monotonic()
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            r = await client.post(f"{self.base_url}/sdapi/v1/extra-single-image", json=payload)
-            self._raise_for_status(r, "upscale")
-            logger.info("a1111_upscale_done duration_ms=%d", int((time.monotonic() - t0) * 1000))
-            return r.json()["image"]
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                r = await client.post(f"{self.base_url}/sdapi/v1/extra-single-image", json=payload)
+                self._raise_for_status(r, "upscale")
+                logger.info("a1111_upscale_done duration_ms=%d", int((time.monotonic() - t0) * 1000))
+                return r.json()["image"]
+        except httpx.TimeoutException as e:
+            logger.error("a1111_upscale_timeout error=%s", e)
+            raise RuntimeError("A1111 upscale timed out") from e
+        except Exception as e:
+            logger.exception("a1111_upscale_failed error=%s", e)
+            raise
 
     async def upscale_batch(self, payload: dict[str, Any]) -> list[str]:
         """Batch upscale. Returns list of base64-encoded images."""
         t0 = time.monotonic()
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            r = await client.post(f"{self.base_url}/sdapi/v1/extra-batch-images", json=payload)
-            self._raise_for_status(r, "upscale_batch")
-            logger.info("a1111_upscale_batch_done duration_ms=%d", int((time.monotonic() - t0) * 1000))
-            images = r.json().get("images", [])
-            results: list[str] = []
-            for image in images:
-                if isinstance(image, str):
-                    results.append(image)
-                elif isinstance(image, dict) and isinstance(image.get("image"), str):
-                    results.append(image["image"])
-            return results
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                r = await client.post(f"{self.base_url}/sdapi/v1/extra-batch-images", json=payload)
+                self._raise_for_status(r, "upscale_batch")
+                logger.info("a1111_upscale_batch_done duration_ms=%d", int((time.monotonic() - t0) * 1000))
+                images = r.json().get("images", [])
+                results: list[str] = []
+                for image in images:
+                    if isinstance(image, str):
+                        results.append(image)
+                    elif isinstance(image, dict) and isinstance(image.get("image"), str):
+                        results.append(image["image"])
+                return results
+        except httpx.TimeoutException as e:
+            logger.error("a1111_upscale_batch_timeout error=%s", e)
+            raise RuntimeError("A1111 upscale_batch timed out") from e
+        except Exception as e:
+            logger.exception("a1111_upscale_batch_failed error=%s", e)
+            raise
 
     async def interrupt(self) -> None:
         try:
@@ -124,12 +161,19 @@ class A1111Client:
 
     async def interrogate(self, b64_image: str, model: str = "clip") -> str:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            r = await client.post(
-                f"{self.base_url}/sdapi/v1/interrogate",
-                json={"image": b64_image, "model": model},
-            )
-            self._raise_for_status(r, "interrogate")
-            return r.json()["caption"]
+            try:
+                r = await client.post(
+                    f"{self.base_url}/sdapi/v1/interrogate",
+                    json={"image": b64_image, "model": model},
+                )
+                self._raise_for_status(r, "interrogate")
+                return r.json()["caption"]
+            except httpx.TimeoutException as e:
+                logger.error("a1111_interrogate_timeout error=%s", e)
+                raise RuntimeError("A1111 interrogate timed out") from e
+            except Exception as e:
+                logger.exception("a1111_interrogate_failed error=%s", e)
+                raise
 
     async def get_models(self) -> list[dict]:
         async with httpx.AsyncClient(timeout=10) as client:
@@ -150,10 +194,7 @@ class A1111Client:
                 getattr(response, "url", ""),
                 detail,
             )
-            raise RuntimeError(
-                f"A1111 {operation} failed status={getattr(response, 'status_code', None)} "
-                f"url={getattr(response, 'url', '')} detail={detail}"
-            ) from exc
+            raise A1111RequestError(operation, getattr(response, "status_code", None), detail) from exc
 
     async def get_upscalers(self) -> list[dict]:
         async with httpx.AsyncClient(timeout=10) as client:
@@ -197,10 +238,17 @@ class A1111Client:
 
     async def sam_predict(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Call SAM (inpaint-anything) to get segmentation masks from click points."""
-        async with httpx.AsyncClient(timeout=60) as client:
-            r = await client.post(f"{self.base_url}/sam/sam-predict", json=payload)
-            self._raise_for_status(r, "sam_predict")
-            return r.json()
+        try:
+            async with httpx.AsyncClient(timeout=60) as client:
+                r = await client.post(f"{self.base_url}/sam/sam-predict", json=payload)
+                self._raise_for_status(r, "sam_predict")
+                return r.json()
+        except httpx.TimeoutException as e:
+            logger.error("a1111_sam_predict_timeout error=%s", e)
+            raise RuntimeError("A1111 sam_predict timed out") from e
+        except Exception as e:
+            logger.exception("a1111_sam_predict_failed error=%s", e)
+            raise
 
     async def get_progress(self) -> dict[str, Any]:
         async with httpx.AsyncClient(timeout=10) as client:

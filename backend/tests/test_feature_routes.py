@@ -15,7 +15,7 @@ from app.database import Base
 from app.models.image import Image
 from app.models.job import Job
 from app.models.user import User
-from app.routers import capabilities, edit, generate, jobs, outpaint, sharpen, upscale
+from app.routers import capabilities, edit, generate, inpaint, jobs, outpaint, sharpen, upscale
 
 
 class FakeA1111:
@@ -148,6 +148,17 @@ class SizedPngUpload:
 
     async def read(self):
         return png_bytes(self.width, self.height)
+
+
+class MaskUpload:
+    async def read(self):
+        image = PILImage.new("L", (17, 11), 0)
+        for x in range(4, 12):
+            for y in range(3, 9):
+                image.putpixel((x, y), 255)
+        buf = BytesIO()
+        image.save(buf, format="PNG")
+        return buf.getvalue()
 
 
 class CapturedTasks:
@@ -977,3 +988,39 @@ def test_capabilities_cache_returns_same_result(monkeypatch):
     # Second call should hit cache, not call get_models again
     # (get_models was only called once since cache TTL hasn't expired)
     assert result1.checkpoints == result2.checkpoints
+
+
+def test_inpaint_route_composites_reference_image_into_mask(monkeypatch):
+    factory = session_factory()
+    db = factory()
+    user = seed_user(db)
+
+    class EncodingFake(FakeA1111):
+        def encode_image(self, value):
+            return "encoded-composite" if value == b"composited" else "encoded-input"
+
+    fake = EncodingFake()
+    patch_common(monkeypatch, inpaint, factory, fake)
+    monkeypatch.setattr(inpaint, "composite_reference_into_mask", lambda *_args: b"composited")
+    tasks = CapturedTasks()
+
+    response = asyncio.run(call_and_run_tasks(
+        inpaint.inpaint_image(
+            background_tasks=tasks,
+            prompt="place the object on the table",
+            style="realistic",
+            image=SizedPngUpload(17, 11),
+            mask=MaskUpload(),
+            reference_image=SizedPngUpload(6, 6),
+            db=db,
+            current_user=user,
+        ),
+        tasks,
+    ))
+
+    assert response.status == "pending"
+    assert fake.payloads[0][0] == "img2img"
+    payload = fake.payloads[0][1]
+    assert payload["init_images"] == ["encoded-composite"]
+    assert "integrate the referenced subject" in payload["prompt"]
+    assert payload["denoising_strength"] >= 0.58
