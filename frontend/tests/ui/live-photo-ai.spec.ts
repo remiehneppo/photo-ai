@@ -40,6 +40,19 @@ type CaseResult = {
   actual: string;
   job_id?: string;
   output_url?: string;
+  submit_endpoint?: string;
+  output_validation?: {
+    ok: boolean;
+    content_type?: string | null;
+    bytes?: number;
+    width?: number;
+    height?: number;
+    format?: string;
+    caption?: string;
+    expected_keywords?: string[];
+    matched_keywords?: string[];
+    warning?: string;
+  };
   progress?: {
     percent: number;
     current_step?: number | null;
@@ -63,6 +76,7 @@ const URL_TIMEOUT_MS = Number(process.env.LIVE_URL_TIMEOUT_MS ?? 15_000);
 const LIVE_DEPTH = process.env.LIVE_DEPTH === "full" ? "full" : "smoke";
 const LIVE_RESOURCE_SOAK = process.env.LIVE_RESOURCE_SOAK === "1";
 const LIVE_SOAK_JOBS = Number(process.env.LIVE_SOAK_JOBS ?? 5);
+const LIVE_SEMANTIC_STRICT = process.env.LIVE_SEMANTIC_STRICT === "1";
 
 const allStyles = ["realistic", "anime", "advertisement", "portrait", "artistic"];
 const styles = LIVE_DEPTH === "full" ? allStyles : ["realistic"];
@@ -223,6 +237,7 @@ test("live browser matrix against real backend and A1111", async ({ page }, test
     return await capabilityText(page);
   });
 
+  await submitCancelCase(page, testInfo);
   await submitGenerateMatrix(page, testInfo, capabilities);
   await submitGenerateReferenceMatrix(page, testInfo, capabilities);
   await submitEditMatrix(page, testInfo, capabilities);
@@ -246,6 +261,38 @@ test("live browser matrix against real backend and A1111", async ({ page }, test
   expect(report.unexpected_console_errors).toEqual([]);
   expect(report.unexpected_network_errors).toEqual([]);
 });
+
+async function submitCancelCase(page: Page, testInfo: TestInfo) {
+  if (LIVE_DEPTH !== "full") {
+    addSkip("cancel-running-job", "Cancel a running generation", "Cancel button marks active job failed/cancelled", "LIVE_DEPTH=smoke");
+    return;
+  }
+  if (!a1111Connected) {
+    addSkip("cancel-running-job", "Cancel a running generation", "Cancel button marks active job failed/cancelled", "A1111 unavailable");
+    return;
+  }
+
+  await runCase(page, testInfo, "cancel-running-job", "Cancel a running generation", "Cancel button marks active job failed/cancelled", async () => {
+    await selectTab(page, "Generate");
+    await chooseStyle(page, "realistic");
+    await page.getByPlaceholder("Describe the image you want...").fill("cancel running job live browser");
+    const responsePromise = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return response.request().method() === "POST" && url.origin === API_BASE && url.pathname === "/api/generate";
+    });
+    await page.getByRole("button", { name: "Generate" }).last().click();
+    const response = await responsePromise;
+    if (!response.ok()) throw new Error(`submit failed ${response.status()}: ${await response.text()}`);
+    const payload = (await response.json()) as { job_id: string };
+    await expect(page.getByText(payload.job_id)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("button", { name: "Cancel" })).toBeVisible({ timeout: 15_000 });
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await expect(page.getByText("Cancelled by user")).toBeVisible({ timeout: 15_000 });
+    report.job_sequence.push({ case_id: "cancel-running-job", job_id: payload.job_id, feature: "txt2img", status: "failed" });
+    return `cancelled ${payload.job_id}`;
+  });
+  await rest();
+}
 
 async function submitGenerateMatrix(page: Page, testInfo: TestInfo, capabilities: Capabilities) {
   for (const style of styles) {
@@ -740,7 +787,7 @@ async function runJobCase(
   id: string,
   action: string,
   expected: string,
-  body: () => Promise<{ job: JobDetail; note?: string }>
+  body: () => Promise<{ job: JobDetail; note?: string; submitEndpoint?: string }>
 ) {
   if (!a1111Connected) {
     addSkip(id, action, expected, "A1111 unavailable");
@@ -758,14 +805,20 @@ async function runJobCase(
     if (terminal.job.status !== "done") throw new Error(`job ${terminal.job.id} ended ${terminal.job.status}: ${terminal.job.error_message ?? "no error message"}`);
     if (!output) throw new Error(`job ${terminal.job.id} has no output image`);
     await expect(page.locator("img").last()).toBeVisible();
+    const outputValidation = await validateOutputImage(page, id, terminal.job, output.url);
+    if (LIVE_SEMANTIC_STRICT && !outputValidation.ok) {
+      throw new Error(outputValidation.warning ?? "semantic output validation failed");
+    }
     report.results.push({
       id,
       status: "PASS",
       action,
       expected,
-      actual: `${terminal.note ?? ""}job ${terminal.job.id} done with output ${output.url}`,
+      actual: `${terminal.note ?? ""}job ${terminal.job.id} done with output ${output.url}; ${formatOutputValidation(outputValidation)}`,
       job_id: terminal.job.id,
       output_url: output.url,
+      submit_endpoint: terminal.submitEndpoint,
+      output_validation: outputValidation,
       progress: {
         percent: terminal.job.progress_percent,
         current_step: terminal.job.current_step,
@@ -807,6 +860,7 @@ async function submitAndWait(page: Page, button: ReturnType<Page["getByRole"]>, 
         "/api/generate",
         "/api/generate/reference",
         "/api/edit",
+        "/api/inpaint",
         "/api/upscale",
         "/api/sharpen",
         "/api/outpaint",
@@ -826,16 +880,139 @@ async function submitAndWait(page: Page, button: ReturnType<Page["getByRole"]>, 
     const response = await responsePromise;
     if (!response.ok()) throw new Error(`submit failed ${response.status()}: ${await response.text()}`);
     const payload = (await response.json()) as { job_id: string };
+    const submitUrl = new URL(response.url());
+    const contentType = response.request().headers()["content-type"];
     await expect(page.getByText(payload.job_id)).toBeVisible({ timeout: 15_000 });
     const terminal = await waitForJobTerminal(page, payload.job_id, caseId);
     if (expectOutput && terminal.status === "done" && !terminal.images.some((image) => image.type === "output" && image.url)) {
       throw new Error(`job ${terminal.id} finished without an output image`);
     }
     report.job_sequence.push({ case_id: caseId, job_id: terminal.id, feature: terminal.feature, status: terminal.status });
-    return { job: terminal };
+    return {
+      job: terminal,
+      submitEndpoint: submitUrl.pathname,
+      note: contentType ? `submitted ${submitUrl.pathname} (${contentType}); ` : `submitted ${submitUrl.pathname}; `
+    };
   } finally {
     liveJobInFlight = false;
   }
+}
+
+
+async function validateOutputImage(page: Page, caseId: string, job: JobDetail, outputUrl: string): Promise<NonNullable<CaseResult["output_validation"]>> {
+  const token = await page.evaluate(() => localStorage.getItem("photo_ai_token"));
+  const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+  const response = await page.request.get(outputUrl.startsWith("http") ? outputUrl : `${API_BASE}${outputUrl}`, { headers });
+  if (!response.ok()) {
+    throw new Error(`output image fetch failed ${response.status()}: ${await response.text()}`);
+  }
+
+  const body = await response.body();
+  const imageInfo = parseImageInfo(body);
+  if (!imageInfo) {
+    throw new Error(`output image has unsupported or invalid header: ${response.headers()["content-type"] ?? "unknown content type"}`);
+  }
+  if (imageInfo.width < 16 || imageInfo.height < 16) {
+    throw new Error(`output image dimensions are too small: ${imageInfo.width}x${imageInfo.height}`);
+  }
+
+  const expectedKeywords = expectedSemanticKeywords(caseId, job);
+  const validation: NonNullable<CaseResult["output_validation"]> = {
+    ok: true,
+    content_type: response.headers()["content-type"],
+    bytes: body.length,
+    width: imageInfo.width,
+    height: imageInfo.height,
+    format: imageInfo.format,
+    expected_keywords: expectedKeywords
+  };
+
+  if (expectedKeywords.length === 0) return validation;
+
+  const caption = await interrogateOutput(page, body, response.headers()["content-type"] ?? `image/${imageInfo.format}`);
+  if (!caption) {
+    validation.warning = "semantic interrogation unavailable";
+    return validation;
+  }
+
+  const matchedKeywords = matchKeywords(caption, expectedKeywords);
+  validation.caption = caption;
+  validation.matched_keywords = matchedKeywords;
+  if (matchedKeywords.length === 0) {
+    validation.ok = false;
+    validation.warning = `caption did not contain expected keywords: ${expectedKeywords.join(", ")}`;
+  }
+  return validation;
+}
+
+async function interrogateOutput(page: Page, buffer: Buffer, mimeType: string) {
+  const token = await page.evaluate(() => localStorage.getItem("photo_ai_token"));
+  const response = await page.request.post(`${API_BASE}/api/interrogate`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    multipart: {
+      image: {
+        name: mimeType.includes("jpeg") ? "output.jpg" : "output.png",
+        mimeType,
+        buffer
+      }
+    }
+  });
+  if (!response.ok()) return "";
+  const payload = (await response.json()) as { prompt?: string };
+  return payload.prompt ?? "";
+}
+
+function parseImageInfo(buffer: Buffer) {
+  if (buffer.length >= 24 && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+    return { format: "png", width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+  }
+  if (buffer.length >= 10 && buffer[0] === 0xff && buffer[1] === 0xd8) {
+    let offset = 2;
+    while (offset + 9 < buffer.length) {
+      if (buffer[offset] !== 0xff) break;
+      const marker = buffer[offset + 1];
+      const length = buffer.readUInt16BE(offset + 2);
+      if ((marker >= 0xc0 && marker <= 0xc3) || (marker >= 0xc5 && marker <= 0xc7) || (marker >= 0xc9 && marker <= 0xcb) || (marker >= 0xcd && marker <= 0xcf)) {
+        return { format: "jpeg", width: buffer.readUInt16BE(offset + 7), height: buffer.readUInt16BE(offset + 5) };
+      }
+      offset += 2 + length;
+    }
+  }
+  if (buffer.length >= 30 && buffer.toString("ascii", 0, 4) === "RIFF" && buffer.toString("ascii", 8, 12) === "WEBP") {
+    if (buffer.toString("ascii", 12, 16) === "VP8X") {
+      return {
+        format: "webp",
+        width: 1 + buffer.readUIntLE(24, 3),
+        height: 1 + buffer.readUIntLE(27, 3)
+      };
+    }
+  }
+  return null;
+}
+
+function expectedSemanticKeywords(caseId: string, job: JobDetail) {
+  const text = `${caseId} ${job.style ?? ""} ${job.user_prompt ?? ""}`.toLowerCase();
+  const keywords = new Set<string>();
+  if (text.includes("anime")) ["anime", "cartoon", "illustration", "manga"].forEach((word) => keywords.add(word));
+  if (text.includes("portrait") || text.includes("face") || text.includes("person")) ["portrait", "face", "person", "woman", "man"].forEach((word) => keywords.add(word));
+  if (text.includes("advertisement") || text.includes("product") || text.includes("studio")) ["product", "studio", "advertisement", "commercial"].forEach((word) => keywords.add(word));
+  if (text.includes("umbrella")) ["umbrella", "red"].forEach((word) => keywords.add(word));
+  if (text.includes("background")) ["background", "studio", "white"].forEach((word) => keywords.add(word));
+  if (text.includes("realistic") || text.includes("photo")) ["photo", "photograph", "realistic"].forEach((word) => keywords.add(word));
+  return Array.from(keywords);
+}
+
+function matchKeywords(caption: string, keywords: string[]) {
+  const normalized = caption.toLowerCase();
+  return keywords.filter((keyword) => normalized.includes(keyword));
+}
+
+function formatOutputValidation(validation: NonNullable<CaseResult["output_validation"]>) {
+  const image = `${validation.format} ${validation.width}x${validation.height}, ${validation.bytes} bytes`;
+  const semantic = validation.caption
+    ? `caption matched [${validation.matched_keywords?.join(", ") || "none"}]`
+    : validation.warning || "semantic not required";
+  return `${image}; ${semantic}`;
 }
 
 async function waitForJobTerminal(page: Page, jobId: string, caseId: string) {
