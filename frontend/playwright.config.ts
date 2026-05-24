@@ -5,6 +5,7 @@ const frontendPort = process.env.FRONTEND_PORT || "3001";
 const frontendBaseUrl = process.env.FRONTEND_BASE_URL || `http://localhost:${frontendPort}`;
 
 export default defineConfig({
+  workers: 1,
   testDir: "./tests/ui",
   timeout: 30_000,
   expect: {
@@ -16,7 +17,7 @@ export default defineConfig({
     screenshot: "only-on-failure"
   },
   webServer: {
-    command: `npx next dev -p ${frontendPort}`,
+    command: `npx next dev --webpack -p ${frontendPort}`,
     url: frontendBaseUrl,
     reuseExistingServer: true,
     timeout: 120_000

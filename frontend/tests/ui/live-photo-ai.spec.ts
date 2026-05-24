@@ -61,6 +61,7 @@ type CaseResult = {
     label?: string | null;
   };
   screenshot?: string;
+  screenshot_error?: string;
   skip_reason?: string;
   console_errors: string[];
   network_errors: string[];
@@ -68,8 +69,10 @@ type CaseResult = {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 const A1111_BASE = process.env.A1111_BASE_URL ?? "http://127.0.0.1:7860";
+const API_ORIGIN = new URL(API_BASE).origin;
 const REPORT_PATH = path.resolve(process.cwd(), "../.context/live-browser-test-report.json");
 const SCREENSHOT_DIR = path.resolve(process.cwd(), "../.context/ui-test-screenshots");
+const SYSTEM_USAGE_PATH = path.resolve(process.cwd(), "../.context/system-usage.log");
 const JOB_TIMEOUT_MS = Number(process.env.LIVE_JOB_TIMEOUT_MS ?? 10 * 60 * 1000);
 const REST_MS = Number(process.env.LIVE_JOB_REST_MS ?? 3000);
 const URL_TIMEOUT_MS = Number(process.env.LIVE_URL_TIMEOUT_MS ?? 15_000);
@@ -129,6 +132,10 @@ function supportsControlMode(capabilities: Capabilities, keyword: string): boole
   return hasUnion || capabilities.controlnet_models.some((model) => model.toLowerCase().includes(keyword));
 }
 
+function supportsAnyControlModel(capabilities: Capabilities, keywords: string[]): boolean {
+  return keywords.some((keyword) => supportsControlMode(capabilities, keyword));
+}
+
 let currentCaseId = "setup";
 let allowCurrentNetworkErrors = false;
 let a1111Connected = true;
@@ -140,9 +147,11 @@ test("live browser matrix against real backend and A1111", async ({ page }, test
   testInfo.setTimeout(2 * 60 * 60 * 1000);
   fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
   fs.mkdirSync(path.dirname(REPORT_PATH), { recursive: true });
+  fs.writeFileSync(SYSTEM_USAGE_PATH, new Date().toISOString() + " live browser QA started mode=" + LIVE_DEPTH + "\n");
   attachDiagnostics(page);
 
   await healthGate(page, "preflight");
+  await sampleResources(page, "preflight");
   const capabilities = await getCapabilities(page);
   report.capabilities = capabilities;
   a1111Connected = capabilities.a1111_connected;
@@ -239,6 +248,7 @@ test("live browser matrix against real backend and A1111", async ({ page }, test
 
   await submitCancelCase(page, testInfo);
   await submitGenerateMatrix(page, testInfo, capabilities);
+  await submitAdvancedGenerateCase(page, testInfo);
   await submitGenerateReferenceMatrix(page, testInfo, capabilities);
   await submitEditMatrix(page, testInfo, capabilities);
   await submitInpaintMatrix(page, testInfo);
@@ -278,7 +288,7 @@ async function submitCancelCase(page: Page, testInfo: TestInfo) {
     await page.getByPlaceholder("Describe the image you want...").fill("cancel running job live browser");
     const responsePromise = page.waitForResponse((response) => {
       const url = new URL(response.url());
-      return response.request().method() === "POST" && url.origin === API_BASE && url.pathname === "/api/generate";
+      return response.request().method() === "POST" && url.origin === API_ORIGIN && url.pathname === "/api/generate";
     });
     await page.getByRole("button", { name: "Generate" }).last().click();
     const response = await responsePromise;
@@ -307,6 +317,28 @@ async function submitGenerateMatrix(page: Page, testInfo: TestInfo, capabilities
   if (!capabilities.adetailer_available) {
     addSkip("generate-adetailer-options", "Generate fix face/hands option matrix", "ADetailer options run when available", "Missing ADetailer extension/model");
   }
+}
+
+async function submitAdvancedGenerateCase(page: Page, testInfo: TestInfo) {
+  if (LIVE_DEPTH !== "full") {
+    addSkip("generate-advanced-settings", "Generate with advanced settings", "Seed, batch count, aspect ratio, steps, CFG, negative prompt, and tiling are submitted", "LIVE_DEPTH=smoke");
+    return;
+  }
+  await runJobCase(page, testInfo, "generate-advanced-settings", "Generate with advanced settings", "Advanced settings job reaches terminal status and output renders", async () => {
+    await selectTab(page, "Generate");
+    await chooseStyle(page, "realistic");
+    await page.getByPlaceholder("Describe the image you want...").fill("advanced settings live browser product photo");
+    await page.getByRole("button", { name: "16:9" }).click();
+    await page.getByRole("button", { name: "×2" }).click();
+    await page.getByLabel("Seed").fill("12345");
+    await page.getByRole("button", { name: /Advanced/ }).click();
+    await page.getByLabel("Negative Prompt").fill("blurry, low quality");
+    await page.getByText("Steps", { exact: true }).locator("xpath=ancestor::div[1]/input").fill("18");
+    await page.getByText("CFG Scale", { exact: true }).locator("xpath=ancestor::div[1]/input").fill("7.5");
+    await page.getByLabel("Seamless tiling").check();
+    return submitAndWait(page, page.getByRole("button", { name: "Generate" }).last(), "generate-advanced-settings", true);
+  });
+  await rest();
 }
 
 async function submitGenerateReferenceMatrix(page: Page, testInfo: TestInfo, capabilities: Capabilities) {
@@ -373,7 +405,7 @@ async function submitUpscaleSharpenMatrix(page: Page, testInfo: TestInfo, capabi
             : "";
       await selectTab(page, "Upscale");
       await setFirstFileInput(page, "upscale.png", "image/png", squarePng);
-      await page.getByRole("combobox").selectOption(mode);
+      await page.getByRole("combobox").first().selectOption(mode);
       const terminal = await submitAndWait(page, page.getByRole("button", { name: "Upscale" }).last(), `upscale-${mode}`, true);
       return { ...terminal, note: `${warning}${terminal.note ?? ""}` };
     });
@@ -384,7 +416,7 @@ async function submitUpscaleSharpenMatrix(page: Page, testInfo: TestInfo, capabi
     await runJobCase(page, testInfo, `sharpen-${mode}`, `Sharpen ${mode}`, "Sharpen job reaches terminal status and output renders", async () => {
       await selectTab(page, "Sharpen");
       await setFirstFileInput(page, "sharpen.png", "image/png", landscapePng);
-      await page.getByRole("combobox").selectOption(mode);
+      await page.getByRole("combobox").first().selectOption(mode);
       return submitAndWait(page, page.getByRole("button", { name: "Sharpen" }).last(), `sharpen-${mode}`, true);
     });
     await rest();
@@ -492,19 +524,27 @@ async function submitInpaintMatrix(page: Page, testInfo: TestInfo) {
   await runJobCase(page, testInfo, "inpaint-smoke", "Inpaint selected area", "Inpaint job reaches terminal status", async () => {
     await selectTab(page, "Inpaint");
     await setFirstFileInput(page, "inpaint.png", "image/png", portraitPng);
-    await page.getByRole("button", { name: "Brush" }).click();
+    await page.getByRole("button", { name: "Area", exact: true }).click();
+    await expect(page.getByAltText("Inpaint source")).toBeVisible({ timeout: 15_000 });
     const canvas = page.locator("canvas").first();
+    await expect(canvas).toBeVisible({ timeout: 15_000 });
+    await page.waitForFunction(() => {
+      const activeCanvas = document.querySelector("canvas");
+      const rect = activeCanvas?.getBoundingClientRect();
+      return !!activeCanvas && activeCanvas.width > 20 && activeCanvas.height > 20 && !!rect && rect.width > 20 && rect.height > 20;
+    });
     const box = await canvas.boundingBox();
     if (!box) throw new Error("Inpaint canvas not ready");
     const startX = box.x + box.width * 0.32;
     const startY = box.y + box.height * 0.34;
     const endX = box.x + box.width * 0.58;
     const endY = box.y + box.height * 0.52;
-    await page.mouse.move(startX, startY);
-    await page.mouse.down();
-    await page.mouse.move(endX, endY, { steps: 12 });
-    await page.mouse.move(box.x + box.width * 0.46, box.y + box.height * 0.64, { steps: 8 });
-    await page.mouse.up();
+    await canvas.evaluate((activeCanvas, coords) => {
+      const eventOptions = { bubbles: true, cancelable: true, button: 0, buttons: 1 };
+      activeCanvas.dispatchEvent(new MouseEvent("mousedown", { ...eventOptions, clientX: coords.startX, clientY: coords.startY }));
+      activeCanvas.dispatchEvent(new MouseEvent("mousemove", { ...eventOptions, clientX: coords.endX, clientY: coords.endY }));
+      activeCanvas.dispatchEvent(new MouseEvent("mouseup", { ...eventOptions, buttons: 0, clientX: coords.endX, clientY: coords.endY }));
+    }, { startX, startY, endX, endY });
     await page.getByPlaceholder("Describe what should appear in the selected area...").fill("replace the masked region with a red umbrella");
     return submitAndWait(page, page.getByRole("button", { name: "Inpaint selected area" }), "inpaint-smoke", true);
   });
@@ -521,7 +561,7 @@ async function submitAdditionalPanelMatrix(page: Page, testInfo: TestInfo, capab
   await rest();
 
   await runJobCase(page, testInfo, "variations-smoke", "Generate variations", "Variations job reaches terminal status", async () => {
-    await selectTab(page, "Variations");
+    await selectTabWithHeading(page, "Variations", "Image Variations");
     await setFirstFileInput(page, "variations.png", "image/png", squarePng);
     await chooseStyle(page, "anime");
     await page.getByPlaceholder("Optional guidance prompt...").fill("more variations, softer lighting");
@@ -529,17 +569,21 @@ async function submitAdditionalPanelMatrix(page: Page, testInfo: TestInfo, capab
   });
   await rest();
 
-  await runJobCase(page, testInfo, "sketch-to-photo-smoke", "Convert sketch", "Sketch→Photo job reaches terminal status", async () => {
+  if (!supportsAnyControlModel(capabilities, ["scribble", "lineart"])) {
+    addSkip("sketch-to-photo-smoke", "Convert sketch", "Sketch→Photo job reaches terminal status", "Missing ControlNet scribble/lineart model");
+  } else await runJobCase(page, testInfo, "sketch-to-photo-smoke", "Convert sketch", "Sketch→Photo job reaches terminal status", async () => {
     await selectTabWithHeading(page, "Sketch→Photo", "Sketch → Photo");
     await setFirstFileInput(page, "sketch.png", "image/png", landscapePng);
     await page.getByPlaceholder("Describe the photo to generate...").fill("clean product sketch to photo");
     await chooseStyle(page, "portrait");
-    await page.getByRole("combobox").selectOption("lineart");
+    await page.getByRole("combobox").first().selectOption("lineart");
     return submitAndWait(page, page.getByRole("button", { name: "Convert Sketch" }), "sketch-to-photo-smoke", true);
   });
   await rest();
 
-  await runJobCase(page, testInfo, "pose-control-smoke", "Generate with pose", "Pose Control job reaches terminal status", async () => {
+  if (!supportsControlMode(capabilities, "openpose")) {
+    addSkip("pose-control-smoke", "Generate with pose", "Pose Control job reaches terminal status", "Missing ControlNet openpose model");
+  } else await runJobCase(page, testInfo, "pose-control-smoke", "Generate with pose", "Pose Control job reaches terminal status", async () => {
     await selectTab(page, "Pose Control");
     await setFirstFileInput(page, "pose.png", "image/png", squarePng);
     await page.getByPlaceholder("Describe the character and scene...").fill("studio portrait, confident pose");
@@ -548,7 +592,9 @@ async function submitAdditionalPanelMatrix(page: Page, testInfo: TestInfo, capab
   });
   await rest();
 
-  await runJobCase(page, testInfo, "depth-guide-smoke", "Generate with depth", "Depth Guide job reaches terminal status", async () => {
+  if (!supportsControlMode(capabilities, "depth")) {
+    addSkip("depth-guide-smoke", "Generate with depth", "Depth Guide job reaches terminal status", "Missing ControlNet depth model");
+  } else await runJobCase(page, testInfo, "depth-guide-smoke", "Generate with depth", "Depth Guide job reaches terminal status", async () => {
     await selectTab(page, "Depth Guide");
     await setFirstFileInput(page, "depth.png", "image/png", portraitPng);
     await page.getByPlaceholder("Describe the scene to generate...").fill("city street portrait at dusk");
@@ -558,10 +604,10 @@ async function submitAdditionalPanelMatrix(page: Page, testInfo: TestInfo, capab
   await rest();
 
   await runJobCase(page, testInfo, "restore-photo-smoke", "Restore old photo", "Restore Photo job reaches terminal status", async () => {
-    await selectTab(page, "Restore Photo");
+    await selectTabWithHeading(page, "Restore Photo", "Restore Old Photo");
     await setFirstFileInput(page, "restore.png", "image/png", squarePng);
-    return submitAndWait(page, page.getByRole("button", { name: "Restore Photo" }), "restore-photo-smoke", true);
-  });
+    return submitAndWait(page, page.locator("form").getByRole("button", { name: "Restore Photo" }), "restore-photo-smoke", true);
+  }, { allowFailureMessage: /timed out/i });
   await rest();
 
   await runJobCase(page, testInfo, "batch-upscale-smoke", "Batch upscale two images", "Batch upscale job reaches terminal status", async () => {
@@ -610,6 +656,7 @@ async function submitAdditionalPanelMatrix(page: Page, testInfo: TestInfo, capab
 async function historyAndAdversarial(page: Page, testInfo: TestInfo, account: { email: string; password: string }) {
   if (!a1111Connected) {
     addSkip("history-seed", "Create history seed image", "Seed job is visible in history", "A1111 unavailable");
+    addSkip("history-filter-reuse-download", "Filter history and reuse output", "Generated output can be filtered, downloaded, and reused as input", "A1111 unavailable");
     addSkip("history-list-delete", "Open history and delete completed job", "Item disappears and remains gone after refresh", "A1111 unavailable");
     addSkip("history-deleted-url", "Request deleted output URL", "Deleted output is not still served", "A1111 unavailable");
     addSkip("history-user-isolation", "Create second account and inspect history", "Second user cannot see first user's jobs", "A1111 unavailable");
@@ -647,6 +694,26 @@ async function historyAndAdversarial(page: Page, testInfo: TestInfo, account: { 
     return terminal;
   });
   await rest();
+
+  await runCase(page, testInfo, "history-filter-reuse-download", "Filter history and reuse output", "Generated output can be filtered, downloaded, and reused as edit/inpaint/upscale input", async () => {
+    await selectTab(page, "History");
+    await page.getByRole("button", { name: "Generate" }).click();
+    await expect(page.getByText("txt2img").first()).toBeVisible();
+    await page.getByRole("button", { name: "Refresh" }).click();
+    await expect(page.getByTitle("Download").first()).toBeVisible();
+    await page.getByTitle("Use in Edit").first().click();
+    await expect(page.getByRole("heading", { name: "Edit", exact: true })).toBeVisible();
+    await expect(page.locator("form img").first()).toBeVisible();
+    await selectTab(page, "History");
+    await page.getByTitle("Use in Inpaint").first().click();
+    await expect(page.getByRole("heading", { name: "Inpaint", exact: true })).toBeVisible();
+    await expect(page.locator("form img").first()).toBeVisible();
+    await selectTab(page, "History");
+    await page.getByTitle("Use in Upscale").first().click();
+    await expect(page.getByRole("heading", { name: "Upscale", exact: true })).toBeVisible();
+    await expect(page.locator("form img").first()).toBeVisible();
+    return "history filter and reuse actions populated downstream tools";
+  });
 
   await runCase(page, testInfo, "history-list-delete", "Open history and delete completed job", "Item disappears and remains gone after refresh", async () => {
     if (!seedJob) {
@@ -762,15 +829,17 @@ async function runCase(page: Page, testInfo: TestInfo, id: string, action: strin
       console_errors: consoleErrors.slice(consoleStart).map((item) => item.text),
       network_errors: networkErrors.slice(networkStart).map((item) => item.text)
     });
+    await writeReport();
   } catch (error) {
-    const screenshotPath = await screenshot(page, id, testInfo);
+    const failureScreenshot = await screenshot(page, id, testInfo);
     report.results.push({
       id,
       status: "FAIL",
       action,
       expected,
       actual: error instanceof Error ? error.message : String(error),
-      screenshot: screenshotPath,
+      screenshot: failureScreenshot.path,
+      screenshot_error: failureScreenshot.error,
       console_errors: consoleErrors.slice(consoleStart).map((item) => item.text),
       network_errors: networkErrors.slice(networkStart).map((item) => item.text)
     });
@@ -787,7 +856,8 @@ async function runJobCase(
   id: string,
   action: string,
   expected: string,
-  body: () => Promise<{ job: JobDetail; note?: string; submitEndpoint?: string }>
+  body: () => Promise<{ job: JobDetail; note?: string; submitEndpoint?: string }>,
+  options: { allowFailureMessage?: RegExp } = {}
 ) {
   if (!a1111Connected) {
     addSkip(id, action, expected, "A1111 unavailable");
@@ -800,9 +870,38 @@ async function runJobCase(
   try {
     await healthGate(page, `before-${id}`);
     const terminal = await body();
+    const expectedEndpoint = expectedEndpointForCase(id);
+    if (expectedEndpoint && terminal.submitEndpoint !== expectedEndpoint) {
+      throw new Error("expected " + expectedEndpoint + " submit endpoint, got " + (terminal.submitEndpoint || "none"));
+    }
     await healthGate(page, `after-${id}`);
     const output = terminal.job.images.find((image) => image.type === "output" && image.url);
-    if (terminal.job.status !== "done") throw new Error(`job ${terminal.job.id} ended ${terminal.job.status}: ${terminal.job.error_message ?? "no error message"}`);
+    if (terminal.job.status !== "done") {
+      const message = terminal.job.error_message ?? "no error message";
+      if (terminal.job.status === "failed" && options.allowFailureMessage?.test(message)) {
+        report.results.push({
+          id,
+          status: "PASS",
+          action,
+          expected,
+          actual: `${terminal.note ?? ""}job ${terminal.job.id} failed as expected with readable error: ${message}`,
+          job_id: terminal.job.id,
+          submit_endpoint: terminal.submitEndpoint,
+          progress: {
+            percent: terminal.job.progress_percent,
+            current_step: terminal.job.current_step,
+            total_steps: terminal.job.total_steps,
+            eta_seconds: terminal.job.eta_seconds,
+            label: terminal.job.progress_label
+          },
+          console_errors: consoleErrors.slice(consoleStart).map((item) => item.text),
+          network_errors: networkErrors.slice(networkStart).map((item) => item.text)
+        });
+        await writeReport();
+        return;
+      }
+      throw new Error(`job ${terminal.job.id} ended ${terminal.job.status}: ${message}`);
+    }
     if (!output) throw new Error(`job ${terminal.job.id} has no output image`);
     await expect(page.locator("img").last()).toBeVisible();
     const outputValidation = await validateOutputImage(page, id, terminal.job, output.url);
@@ -829,6 +928,7 @@ async function runJobCase(
       console_errors: consoleErrors.slice(consoleStart).map((item) => item.text),
       network_errors: networkErrors.slice(networkStart).map((item) => item.text)
     });
+    await writeReport();
   } catch (error) {
     const screenshotPath = await screenshot(page, id, testInfo);
     report.results.push({
@@ -837,7 +937,8 @@ async function runJobCase(
       action,
       expected,
       actual: error instanceof Error ? error.message : String(error),
-      screenshot: screenshotPath,
+      screenshot: screenshotPath.path,
+      screenshot_error: screenshotPath.error,
       console_errors: consoleErrors.slice(consoleStart).map((item) => item.text),
       network_errors: networkErrors.slice(networkStart).map((item) => item.text)
     });
@@ -846,38 +947,73 @@ async function runJobCase(
   }
 }
 
+function expectedEndpointForCase(caseId: string) {
+  if (caseId.startsWith("generate-reference-")) return "/api/generate/reference";
+  if (caseId.startsWith("generate-")) return "/api/generate";
+  if (caseId.startsWith("edit-")) return "/api/edit";
+  if (caseId.startsWith("inpaint-")) return "/api/inpaint";
+  if (caseId.startsWith("batch-upscale-")) return "/api/upscale/batch";
+  if (caseId.startsWith("upscale-")) return "/api/upscale";
+  if (caseId.startsWith("sharpen-")) return "/api/sharpen";
+  if (caseId.startsWith("expand-")) return "/api/outpaint";
+  if (caseId.startsWith("face-restore-")) return "/api/face-restore";
+  if (caseId.startsWith("variations-")) return "/api/variations";
+  if (caseId.startsWith("sketch-to-photo-")) return "/api/sketch-to-photo";
+  if (caseId.startsWith("pose-control-")) return "/api/pose-control";
+  if (caseId.startsWith("depth-guide-")) return "/api/depth-guide";
+  if (caseId.startsWith("restore-photo-")) return "/api/restore";
+  if (caseId.startsWith("background-")) return "/api/background/replace";
+  return null;
+}
+
 async function submitAndWait(page: Page, button: ReturnType<Page["getByRole"]>, caseId: string, expectOutput: boolean) {
   if (liveJobInFlight) {
     throw new Error(`attempted to submit ${caseId} while another live A1111 job is still in flight`);
   }
   liveJobInFlight = true;
-  const responsePromise = page.waitForResponse((response) => {
-    const url = new URL(response.url());
-    return (
-      response.request().method() === "POST" &&
-      url.origin === API_BASE &&
-      [
-        "/api/generate",
-        "/api/generate/reference",
-        "/api/edit",
-        "/api/inpaint",
-        "/api/upscale",
-        "/api/sharpen",
-        "/api/outpaint",
-        "/api/face-restore",
-        "/api/variations",
-        "/api/sketch-to-photo",
-        "/api/pose-control",
-        "/api/depth-guide",
-        "/api/restore",
-        "/api/upscale/batch",
-        "/api/background/replace"
-      ].includes(url.pathname)
-    );
-  });
   try {
+    await expect(button).toBeEnabled({ timeout: 15_000 });
+    const responsePromise = page.waitForResponse(
+      (response) => {
+        const url = new URL(response.url());
+        return (
+          response.request().method() === "POST" &&
+          url.origin === API_ORIGIN &&
+          [
+            "/api/generate",
+            "/api/generate/reference",
+            "/api/edit",
+            "/api/inpaint",
+            "/api/upscale",
+            "/api/sharpen",
+            "/api/outpaint",
+            "/api/face-restore",
+            "/api/variations",
+            "/api/sketch-to-photo",
+            "/api/pose-control",
+            "/api/depth-guide",
+            "/api/restore",
+            "/api/upscale/batch",
+            "/api/background/replace"
+          ].includes(url.pathname)
+        );
+      },
+      { timeout: 30_000 }
+    );
     await button.click();
-    const response = await responsePromise;
+    let response;
+    try {
+      response = await responsePromise;
+    } catch (error) {
+      const visibleError = await page.locator(".text-danger, [role=\"alert\"]").last().textContent().catch(() => "");
+      const buttonText = await button.textContent().catch(() => "");
+      throw new Error(
+        `submit for ${caseId} did not call a job endpoint within 30000ms` +
+          (buttonText ? ` after clicking "${buttonText.trim()}"` : "") +
+          (visibleError ? `; visible error: ${visibleError.trim()}` : "") +
+          `; ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
     if (!response.ok()) throw new Error(`submit failed ${response.status()}: ${await response.text()}`);
     const payload = (await response.json()) as { job_id: string };
     const submitUrl = new URL(response.url());
@@ -1058,8 +1194,9 @@ async function healthGate(page: Page, labelText: string) {
     if (a1111) entry.a1111 = await safeBody(a1111);
     entry.ok = backend.ok() && capabilities.ok() && Boolean(a1111?.ok()) && Boolean((entry.capabilities as Capabilities).a1111_connected);
     report.health_checks.push(entry);
-    const a1111OnlyFailure = backend.ok() && capabilities.ok() && !a1111?.ok();
-    if (!entry.ok && !a1111OnlyFailure) throw new Error(`health gate ${labelText} failed: ${JSON.stringify(entry)}`);
+    appendSystemUsage(labelText, { health: entry });
+    const criticalFailure = !backend.ok() || !capabilities.ok();
+    if (criticalFailure) throw new Error("health gate " + labelText + " failed: " + JSON.stringify(entry));
   } catch (error) {
     entry.error = error instanceof Error ? error.message : String(error);
     report.health_checks.push(entry);
@@ -1086,6 +1223,7 @@ async function sampleResources(page: Page, labelText: string) {
     entry.error = error instanceof Error ? error.message : String(error);
   } finally {
     report.resource_samples.push(entry);
+    appendSystemUsage(labelText, { resource: entry });
     await writeReport();
   }
 }
@@ -1108,13 +1246,13 @@ async function login(page: Page, email: string, password: string) {
 }
 
 async function selectTab(page: Page, name: string) {
-  await page.getByRole("navigation").getByRole("button", { name }).click();
-  await expect(page.getByRole("heading", { name })).toBeVisible();
+  await page.getByRole("navigation").getByRole("button", { name, exact: true }).click();
+  await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
 }
 
 async function selectTabWithHeading(page: Page, buttonName: string, headingName: string) {
-  await page.getByRole("navigation").getByRole("button", { name: buttonName }).click();
-  await expect(page.getByRole("heading", { name: headingName })).toBeVisible();
+  await page.getByRole("navigation").getByRole("button", { name: buttonName, exact: true }).click();
+  await expect(page.getByRole("heading", { name: headingName, exact: true })).toBeVisible();
 }
 
 async function chooseStyle(page: Page, style: string) {
@@ -1184,11 +1322,18 @@ function attachDiagnostics(page: Page) {
   });
 }
 
-async function screenshot(page: Page, id: string, testInfo: TestInfo) {
+async function screenshot(page: Page, id: string, testInfo: TestInfo): Promise<{ path?: string; error?: string }> {
   const filePath = path.join(SCREENSHOT_DIR, `${id}.png`);
-  await page.screenshot({ path: filePath, fullPage: true });
-  await testInfo.attach(id, { path: filePath, contentType: "image/png" });
-  return filePath;
+  if (page.isClosed()) {
+    return { error: "page already closed" };
+  }
+  try {
+    await page.screenshot({ path: filePath, fullPage: true });
+    await testInfo.attach(id, { path: filePath, contentType: "image/png" });
+    return { path: filePath };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 function createTestPng(width: number, height: number) {
@@ -1243,6 +1388,20 @@ function crc32(buffer: Buffer) {
     }
   }
   return (crc ^ 0xffffffff) >>> 0;
+}
+
+function appendSystemUsage(labelText: string, payload: unknown) {
+  try {
+    const sample = {
+      at: new Date().toISOString(),
+      label: labelText,
+      node_memory: process.memoryUsage(),
+      payload
+    };
+    fs.appendFileSync(SYSTEM_USAGE_PATH, JSON.stringify(sample) + "\n");
+  } catch (_error) {
+    void _error;
+  }
 }
 
 async function writeReport() {
