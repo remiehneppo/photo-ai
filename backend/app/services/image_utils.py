@@ -64,6 +64,18 @@ def to_grayscale_png(image_bytes: bytes) -> bytes:
         return image_bytes
 
 
+def invert_mask_png(image_bytes: bytes) -> bytes:
+    """Return a grayscale PNG with selected and unselected mask areas reversed."""
+    try:
+        with PILImage.open(BytesIO(image_bytes)) as img:
+            inverted = ImageChops.invert(img.convert("L"))
+            output = BytesIO()
+            inverted.save(output, format="PNG")
+            return output.getvalue()
+    except UnidentifiedImageError:
+        return image_bytes
+
+
 def mask_bounds(mask_bytes: bytes) -> tuple[int, int, int, int] | None:
     """Return the bounding box of non-black mask pixels."""
     try:
@@ -158,4 +170,3 @@ def _border_background_alpha(image: PILImage.Image, tolerance: int = 34) -> PILI
     stat = ImageStat.Stat(gray)
     threshold = max(tolerance, int(stat.mean[0] + stat.stddev[0] * 0.65))
     return gray.point(lambda px: 0 if px < threshold else 255)
-

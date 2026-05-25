@@ -322,7 +322,7 @@ presets:
         - realisticVisionV60B1_v30VAE-inpainting
         - sd-v1-5-inpainting
         - v1-5-pruned-emaonly
-      upscaler_1: SwinIR 4x
+      upscaler_1: SwinIR_4x
       upscaling_resize: 4
       gfpgan_visibility: 0.0
       codeformer_visibility: 0.8

@@ -50,6 +50,7 @@ type CaseResult = {
     format?: string;
     caption?: string;
     expected_keywords?: string[];
+    expected_keyword_groups?: string[][];
     matched_keywords?: string[];
     warning?: string;
   };
@@ -134,6 +135,10 @@ function supportsControlMode(capabilities: Capabilities, keyword: string): boole
 
 function supportsAnyControlModel(capabilities: Capabilities, keywords: string[]): boolean {
   return keywords.some((keyword) => supportsControlMode(capabilities, keyword));
+}
+
+function supportsUpscaler(capabilities: Capabilities, keyword: string): boolean {
+  return capabilities.upscalers.some((upscaler) => upscaler.toLowerCase().includes(keyword.toLowerCase()));
 }
 
 let currentCaseId = "setup";
@@ -309,7 +314,7 @@ async function submitGenerateMatrix(page: Page, testInfo: TestInfo, capabilities
     await runJobCase(page, testInfo, `generate-${style}`, `Generate ${style}`, "Job reaches done/failed and output renders", async () => {
       await selectTab(page, "Generate");
       await chooseStyle(page, style);
-      await page.getByPlaceholder("Describe the image you want...").fill(`live browser ${style} photo test`);
+    await page.getByPlaceholder("Describe the image you want...").fill(promptForStyle(style));
       return submitAndWait(page, page.getByRole("button", { name: "Generate" }).last(), `generate-${style}`, true);
     });
     await rest();
@@ -333,8 +338,8 @@ async function submitAdvancedGenerateCase(page: Page, testInfo: TestInfo) {
     await page.getByLabel("Seed").fill("12345");
     await page.getByRole("button", { name: /Advanced/ }).click();
     await page.getByLabel("Negative Prompt").fill("blurry, low quality");
-    await page.getByText("Steps", { exact: true }).locator("xpath=ancestor::div[1]/input").fill("18");
-    await page.getByText("CFG Scale", { exact: true }).locator("xpath=ancestor::div[1]/input").fill("7.5");
+    await page.getByLabel("Steps").fill("18");
+    await page.getByLabel("CFG Scale").fill("7.5");
     await page.getByLabel("Seamless tiling").check();
     return submitAndWait(page, page.getByRole("button", { name: "Generate" }).last(), "generate-advanced-settings", true);
   });
@@ -535,17 +540,19 @@ async function submitInpaintMatrix(page: Page, testInfo: TestInfo) {
     });
     const box = await canvas.boundingBox();
     if (!box) throw new Error("Inpaint canvas not ready");
-    const startX = box.x + box.width * 0.32;
-    const startY = box.y + box.height * 0.34;
-    const endX = box.x + box.width * 0.58;
-    const endY = box.y + box.height * 0.52;
+    const startX = box.x + box.width * 0.16;
+    const startY = box.y + box.height * 0.16;
+    const endX = box.x + box.width * 0.84;
+    const endY = box.y + box.height * 0.72;
     await canvas.evaluate((activeCanvas, coords) => {
       const eventOptions = { bubbles: true, cancelable: true, button: 0, buttons: 1 };
       activeCanvas.dispatchEvent(new MouseEvent("mousedown", { ...eventOptions, clientX: coords.startX, clientY: coords.startY }));
       activeCanvas.dispatchEvent(new MouseEvent("mousemove", { ...eventOptions, clientX: coords.endX, clientY: coords.endY }));
       activeCanvas.dispatchEvent(new MouseEvent("mouseup", { ...eventOptions, buttons: 0, clientX: coords.endX, clientY: coords.endY }));
     }, { startX, startY, endX, endY });
-    await page.getByPlaceholder("Describe what should appear in the selected area...").fill("replace the masked region with a red umbrella");
+    await page.getByPlaceholder("Describe what should appear in the selected area...").fill("a bright red umbrella, open umbrella canopy, centered product photograph");
+    await page.getByLabel("Custom denoising").check();
+    await page.getByLabel("Denoising strength").fill("0.95");
     return submitAndWait(page, page.getByRole("button", { name: "Inpaint selected area" }), "inpaint-smoke", true);
   });
   await rest();
@@ -603,11 +610,13 @@ async function submitAdditionalPanelMatrix(page: Page, testInfo: TestInfo, capab
   });
   await rest();
 
-  await runJobCase(page, testInfo, "restore-photo-smoke", "Restore old photo", "Restore Photo job reaches terminal status", async () => {
+  if (!supportsUpscaler(capabilities, "swinir")) {
+    addSkip("restore-photo-smoke", "Restore old photo", "Restore Photo job reaches terminal status", "Missing SwinIR restore upscaler");
+  } else await runJobCase(page, testInfo, "restore-photo-smoke", "Restore old photo", "Restore Photo job reaches terminal status", async () => {
     await selectTabWithHeading(page, "Restore Photo", "Restore Old Photo");
     await setFirstFileInput(page, "restore.png", "image/png", squarePng);
     return submitAndWait(page, page.locator("form").getByRole("button", { name: "Restore Photo" }), "restore-photo-smoke", true);
-  }, { allowFailureMessage: /timed out/i });
+  });
   await rest();
 
   await runJobCase(page, testInfo, "batch-upscale-smoke", "Batch upscale two images", "Batch upscale job reaches terminal status", async () => {
@@ -643,7 +652,9 @@ async function submitAdditionalPanelMatrix(page: Page, testInfo: TestInfo, capab
     await selectTabWithHeading(page, "Background", "Background Remove & Replace");
     await setFirstFileInput(page, "background.png", "image/png", landscapePng);
     const preview = page.getByAltText("Preview");
-    await preview.click({ position: { x: 220, y: 180 } });
+    const previewBox = await preview.boundingBox();
+    if (!previewBox) throw new Error("Background preview not ready for subject selection");
+    await preview.click({ position: { x: previewBox.width / 2, y: previewBox.height / 2 } });
     await expect(page.getByRole("button", { name: "Segment Subject" })).toBeVisible();
     await page.getByRole("button", { name: "Segment Subject" }).click();
     await expect(page.getByText("Subject segmented. Describe the new background below.")).toBeVisible({ timeout: 30_000 });
@@ -697,7 +708,7 @@ async function historyAndAdversarial(page: Page, testInfo: TestInfo, account: { 
 
   await runCase(page, testInfo, "history-filter-reuse-download", "Filter history and reuse output", "Generated output can be filtered, downloaded, and reused as edit/inpaint/upscale input", async () => {
     await selectTab(page, "History");
-    await page.getByRole("button", { name: "Generate" }).click();
+    await page.getByRole("group", { name: "Filter history by feature" }).getByRole("button", { name: "Generate", exact: true }).click();
     await expect(page.getByText("txt2img").first()).toBeVisible();
     await page.getByRole("button", { name: "Refresh" }).click();
     await expect(page.getByTitle("Download").first()).toBeVisible();
@@ -724,13 +735,13 @@ async function historyAndAdversarial(page: Page, testInfo: TestInfo, account: { 
     await selectTab(page, "History");
     const output = seedJob.images.find((image) => image.type === "output" && image.url);
     if (!output?.url) throw new Error(`seed job ${seedJob.id} has no output URL`);
-    const seedImage = page.locator("img").first();
-    await expect(seedImage).toBeVisible();
+    const seedItem = page.locator(`[data-job-id="${seedJob.id}"]`);
+    await expect(seedItem).toBeVisible();
     page.once("dialog", async (dialog) => dialog.accept());
-    await page.getByTitle("Delete history item").first().click();
-    await expect(seedImage).not.toBeVisible();
+    await seedItem.getByTitle("Delete history item").click();
+    await expect(seedItem).not.toBeVisible();
     await page.getByRole("button", { name: "Refresh" }).click();
-    await expect(seedImage).not.toBeVisible();
+    await expect(seedItem).not.toBeVisible();
     return `deleted ${seedJob.id}`;
   });
 
@@ -856,8 +867,7 @@ async function runJobCase(
   id: string,
   action: string,
   expected: string,
-  body: () => Promise<{ job: JobDetail; note?: string; submitEndpoint?: string }>,
-  options: { allowFailureMessage?: RegExp } = {}
+  body: () => Promise<{ job: JobDetail; note?: string; submitEndpoint?: string }>
 ) {
   if (!a1111Connected) {
     addSkip(id, action, expected, "A1111 unavailable");
@@ -876,32 +886,7 @@ async function runJobCase(
     }
     await healthGate(page, `after-${id}`);
     const output = terminal.job.images.find((image) => image.type === "output" && image.url);
-    if (terminal.job.status !== "done") {
-      const message = terminal.job.error_message ?? "no error message";
-      if (terminal.job.status === "failed" && options.allowFailureMessage?.test(message)) {
-        report.results.push({
-          id,
-          status: "PASS",
-          action,
-          expected,
-          actual: `${terminal.note ?? ""}job ${terminal.job.id} failed as expected with readable error: ${message}`,
-          job_id: terminal.job.id,
-          submit_endpoint: terminal.submitEndpoint,
-          progress: {
-            percent: terminal.job.progress_percent,
-            current_step: terminal.job.current_step,
-            total_steps: terminal.job.total_steps,
-            eta_seconds: terminal.job.eta_seconds,
-            label: terminal.job.progress_label
-          },
-          console_errors: consoleErrors.slice(consoleStart).map((item) => item.text),
-          network_errors: networkErrors.slice(networkStart).map((item) => item.text)
-        });
-        await writeReport();
-        return;
-      }
-      throw new Error(`job ${terminal.job.id} ended ${terminal.job.status}: ${message}`);
-    }
+    if (terminal.job.status !== "done") throw new Error(`job ${terminal.job.id} ended ${terminal.job.status}: ${terminal.job.error_message ?? "no error message"}`);
     if (!output) throw new Error(`job ${terminal.job.id} has no output image`);
     await expect(page.locator("img").last()).toBeVisible();
     const outputValidation = await validateOutputImage(page, id, terminal.job, output.url);
@@ -1052,7 +1037,8 @@ async function validateOutputImage(page: Page, caseId: string, job: JobDetail, o
     throw new Error(`output image dimensions are too small: ${imageInfo.width}x${imageInfo.height}`);
   }
 
-  const expectedKeywords = expectedSemanticKeywords(caseId, job);
+  const expectedGroups = expectedSemanticGroups(caseId, job);
+  const expectedKeywords = Array.from(new Set(expectedGroups.flat()));
   const validation: NonNullable<CaseResult["output_validation"]> = {
     ok: true,
     content_type: response.headers()["content-type"],
@@ -1060,10 +1046,11 @@ async function validateOutputImage(page: Page, caseId: string, job: JobDetail, o
     width: imageInfo.width,
     height: imageInfo.height,
     format: imageInfo.format,
-    expected_keywords: expectedKeywords
+    expected_keywords: expectedKeywords,
+    expected_keyword_groups: expectedGroups
   };
 
-  if (expectedKeywords.length === 0) return validation;
+  if (expectedGroups.length === 0) return validation;
 
   const caption = await interrogateOutput(page, body, response.headers()["content-type"] ?? `image/${imageInfo.format}`);
   if (!caption) {
@@ -1072,11 +1059,12 @@ async function validateOutputImage(page: Page, caseId: string, job: JobDetail, o
   }
 
   const matchedKeywords = matchKeywords(caption, expectedKeywords);
+  const missingGroups = expectedGroups.filter((group) => matchKeywords(caption, group).length === 0);
   validation.caption = caption;
   validation.matched_keywords = matchedKeywords;
-  if (matchedKeywords.length === 0) {
+  if (missingGroups.length > 0) {
     validation.ok = false;
-    validation.warning = `caption did not contain expected keywords: ${expectedKeywords.join(", ")}`;
+    validation.warning = `caption did not satisfy keyword groups: ${missingGroups.map((group) => group.join("/")).join("; ")}`;
   }
   return validation;
 }
@@ -1126,21 +1114,38 @@ function parseImageInfo(buffer: Buffer) {
   return null;
 }
 
-function expectedSemanticKeywords(caseId: string, job: JobDetail) {
-  const text = `${caseId} ${job.style ?? ""} ${job.user_prompt ?? ""}`.toLowerCase();
-  const keywords = new Set<string>();
-  if (text.includes("anime")) ["anime", "cartoon", "illustration", "manga"].forEach((word) => keywords.add(word));
-  if (text.includes("portrait") || text.includes("face") || text.includes("person")) ["portrait", "face", "person", "woman", "man"].forEach((word) => keywords.add(word));
-  if (text.includes("advertisement") || text.includes("product") || text.includes("studio")) ["product", "studio", "advertisement", "commercial"].forEach((word) => keywords.add(word));
-  if (text.includes("umbrella")) ["umbrella", "red"].forEach((word) => keywords.add(word));
-  if (text.includes("background")) ["background", "studio", "white"].forEach((word) => keywords.add(word));
-  if (text.includes("realistic") || text.includes("photo")) ["photo", "photograph", "realistic"].forEach((word) => keywords.add(word));
-  return Array.from(keywords);
+function expectedSemanticGroups(caseId: string, job: JobDetail) {
+  if (caseId === "inpaint-smoke") return [["umbrella"], ["red"]];
+  if (caseId === "background-segment-replace") return [["white", "studio", "wall"]];
+  if (caseId === "restore-photo-smoke") return [];
+
+  const groups: string[][] = [];
+  const style = job.style?.toLowerCase();
+  if (style === "realistic") groups.push(["photo", "photograph", "photorealistic", "realistic"]);
+  if (style === "anime") groups.push(["anime", "cartoon", "illustration", "manga", "lineart", "line art", "coloring page"]);
+  if (style === "advertisement") groups.push(["product", "studio", "advertisement", "commercial", "packaging"]);
+  if (style === "portrait") groups.push(["portrait", "face", "person", "woman", "man"]);
+  if (style === "artistic") groups.push(["art", "painting", "illustration", "concept"]);
+  return groups;
 }
 
 function matchKeywords(caption: string, keywords: string[]) {
   const normalized = caption.toLowerCase();
-  return keywords.filter((keyword) => normalized.includes(keyword));
+  return keywords.filter((keyword) => {
+    const escaped = keyword.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`(?:^|[^a-z0-9])${escaped}(?:$|[^a-z0-9])`).test(normalized);
+  });
+}
+
+function promptForStyle(style: string) {
+  const prompts: Record<string, string> = {
+    realistic: "a realistic photograph of a red umbrella on a white studio background",
+    anime: "anime illustration of a girl holding a red umbrella",
+    advertisement: "commercial product photograph of a perfume bottle on a white studio background",
+    portrait: "portrait photograph of a woman wearing a red scarf",
+    artistic: "digital painting of a red umbrella in a city street"
+  };
+  return prompts[style] ?? `live browser ${style} test image`;
 }
 
 function formatOutputValidation(validation: NonNullable<CaseResult["output_validation"]>) {

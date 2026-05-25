@@ -944,7 +944,7 @@ function HistoryTab({ onUseImage }: { onUseImage: (target: HistoryImageTarget, f
           Refresh
         </ActionButton>
       </div>
-      <div className="mb-4 flex flex-wrap gap-2">
+      <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="Filter history by feature">
         {featureFilters.map((f) => (
           <button
             key={f.value}

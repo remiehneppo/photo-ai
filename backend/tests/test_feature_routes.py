@@ -1,4 +1,5 @@
 import asyncio
+import base64
 from io import BytesIO
 from typing import Any, Optional
 
@@ -15,7 +16,7 @@ from app.database import Base
 from app.models.image import Image
 from app.models.job import Job
 from app.models.user import User
-from app.routers import capabilities, edit, generate, inpaint, jobs, outpaint, sharpen, upscale
+from app.routers import background, capabilities, edit, generate, inpaint, jobs, outpaint, sharpen, upscale
 
 
 class FakeA1111:
@@ -1024,3 +1025,48 @@ def test_inpaint_route_composites_reference_image_into_mask(monkeypatch):
     assert payload["init_images"] == ["encoded-composite"]
     assert "integrate the referenced subject" in payload["prompt"]
     assert payload["denoising_strength"] >= 0.58
+
+
+def test_background_replace_inverts_subject_mask_for_a1111():
+    subject_mask = PILImage.new("L", (2, 1), 0)
+    subject_mask.putpixel((0, 0), 255)
+    buf = BytesIO()
+    subject_mask.save(buf, format="PNG")
+
+    normalized = background._validate_mask(base64.b64encode(buf.getvalue()).decode("ascii"), (2, 1))
+
+    with PILImage.open(BytesIO(base64.b64decode(normalized))) as inpaint_mask:
+        assert inpaint_mask.getpixel((0, 0)) == 0
+        assert inpaint_mask.getpixel((1, 0)) == 255
+
+
+def test_background_replace_uses_strong_new_background_generation_settings(monkeypatch):
+    factory = session_factory()
+    db = factory()
+    user = seed_user(db)
+    fake = FakeA1111()
+    patch_common(monkeypatch, background, factory, fake)
+    tasks = CapturedTasks()
+    mask = PILImage.new("L", (17, 11), 255)
+    buf = BytesIO()
+    mask.save(buf, format="PNG")
+
+    response = asyncio.run(call_and_run_tasks(
+        background.replace_background(
+            background_tasks=tasks,
+            image=PngUpload(),
+            mask_b64=base64.b64encode(buf.getvalue()).decode("ascii"),
+            background_prompt="white studio background",
+            style="realistic",
+            db=db,
+            current_user=user,
+        ),
+        tasks,
+    ))
+
+    assert response.status == "pending"
+    payload = fake.payloads[0][1]
+    assert "white studio background" in payload["prompt"]
+    assert payload["denoising_strength"] >= 0.9
+    assert payload["inpainting_fill"] == 2
+    assert payload["inpaint_full_res"] is False

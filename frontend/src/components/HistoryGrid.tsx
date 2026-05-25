@@ -28,7 +28,7 @@ export function HistoryGrid({
       {jobs.map((job) => {
         const output = job.images.find((image) => image.type === "output" && image.url);
         return (
-          <article key={job.id} className="rounded-md border border-line bg-white p-3">
+          <article key={job.id} data-job-id={job.id} className="rounded-md border border-line bg-white p-3">
             <div className="aspect-square overflow-hidden rounded-md bg-panel">
               {output ? (
                 <AuthImage src={output.url} alt="" className="h-full w-full object-cover" />

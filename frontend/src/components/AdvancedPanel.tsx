@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 
 export type AdvancedSettings = {
   negativePrompt: string;
@@ -29,6 +29,7 @@ export function AdvancedPanel({
   samplers?: string[];
 }) {
   const [open, setOpen] = useState(false);
+  const controlId = useId();
 
   function set<K extends keyof AdvancedSettings>(key: K, val: AdvancedSettings[K]) {
     onChange({ ...value, [key]: val });
@@ -59,8 +60,9 @@ export function AdvancedPanel({
         <div className="grid gap-4 border-t border-line px-4 pb-4 pt-3">
           {/* G2 – Negative prompt */}
           <div>
-            <label className="mb-1.5 block text-sm font-semibold text-ink">Negative Prompt</label>
+            <label htmlFor={`${controlId}-negative-prompt`} className="mb-1.5 block text-sm font-semibold text-ink">Negative Prompt</label>
             <textarea
+              id={`${controlId}-negative-prompt`}
               value={value.negativePrompt}
               onChange={(e) => set("negativePrompt", e.target.value)}
               placeholder="Things to avoid (e.g. blurry, low quality, nsfw)"
@@ -70,11 +72,12 @@ export function AdvancedPanel({
 
           {/* G3 – Steps */}
           <div>
-            <label className="mb-1.5 flex items-center justify-between text-sm font-semibold text-ink">
+            <label htmlFor={`${controlId}-steps`} className="mb-1.5 flex items-center justify-between text-sm font-semibold text-ink">
               <span>Steps</span>
               <span className="text-muted">{value.steps ?? "preset"}</span>
             </label>
             <input
+              id={`${controlId}-steps`}
               type="range"
               min={10}
               max={50}
@@ -96,11 +99,12 @@ export function AdvancedPanel({
 
           {/* G3 – CFG Scale */}
           <div>
-            <label className="mb-1.5 flex items-center justify-between text-sm font-semibold text-ink">
+            <label htmlFor={`${controlId}-cfg-scale`} className="mb-1.5 flex items-center justify-between text-sm font-semibold text-ink">
               <span>CFG Scale</span>
               <span className="text-muted">{value.cfgScale ?? "preset"}</span>
             </label>
             <input
+              id={`${controlId}-cfg-scale`}
               type="range"
               min={1}
               max={20}
@@ -123,8 +127,9 @@ export function AdvancedPanel({
           {/* G3 – Sampler */}
           {samplers.length > 0 && (
             <div>
-              <label className="mb-1.5 block text-sm font-semibold text-ink">Sampler</label>
+              <label htmlFor={`${controlId}-sampler`} className="mb-1.5 block text-sm font-semibold text-ink">Sampler</label>
               <select
+                id={`${controlId}-sampler`}
                 value={value.samplerName ?? ""}
                 onChange={(e) => set("samplerName", e.target.value || null)}
                 className="focus-ring w-full rounded-md border border-line bg-white px-3 py-2 text-sm text-ink"

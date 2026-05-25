@@ -17,7 +17,7 @@ from app.services.job_service import create_job, run_job, save_job_images
 from app.services.upload_service import read_image_upload
 from app.services.model_service import add_model_override, resolve_checkpoint
 from app.services.preset_service import get_model_meta
-from app.services.image_utils import get_image_size, to_grayscale_png
+from app.services.image_utils import get_image_size, invert_mask_png
 
 router = APIRouter(prefix="/api/background", tags=["background"])
 
@@ -119,18 +119,21 @@ async def replace_background(
         checkpoint = await resolve_checkpoint(a1111, model_choice)
         model_meta = get_model_meta(checkpoint)
         await a1111.load_checkpoint(checkpoint)
-        positive = merge_prompt(preset.get("base_positive", ""), background_prompt)
+        positive = merge_prompt(
+            "seamless replacement background, coherent perspective, consistent lighting, clean edges, photorealistic",
+            background_prompt,
+        )
         payload = {
             "init_images": [b64_input],
             "mask": normalized_mask_b64,
             "prompt": positive,
             "negative_prompt": preset.get("base_negative", ""),
-            "denoising_strength": preset.get("denoising_strength", 0.85),
+            "denoising_strength": max(float(preset.get("denoising_strength", 0.85)), 0.9),
             "steps": preset.get("steps", 30),
             "cfg_scale": preset.get("cfg_scale", 7),
             "sampler_name": preset.get("sampler_name", "DPM++ 2M Karras"),
-            "inpainting_fill": 1,  # original
-            "inpaint_full_res": True,
+            "inpainting_fill": 2,
+            "inpaint_full_res": False,
             "seed": -1,
         }
         payload = add_model_override(payload, checkpoint, model_meta.get("clip_skip"))
@@ -151,7 +154,9 @@ def _validate_mask(mask_b64: str, source_size: tuple[int, int]) -> str:
     mask_size = get_image_size(mask_bytes)
     if mask_size != source_size:
         raise HTTPException(status_code=400, detail="Mask dimensions must match uploaded image dimensions")
-    return base64.b64encode(to_grayscale_png(mask_bytes)).decode("utf-8")
+    # SAM identifies the retained subject; A1111 inpaints white mask areas.
+    # Reverse the subject mask so replacement is applied to the background.
+    return base64.b64encode(invert_mask_png(mask_bytes)).decode("utf-8")
 
 
 async def _select_sam_model() -> str:
